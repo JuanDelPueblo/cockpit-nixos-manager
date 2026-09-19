@@ -35,7 +35,7 @@
 
           src = ./.;
 
-          npmDepsHash = pkgs.lib.fakeHash;
+          npmDepsHash = "sha256-AbphYd9V8LJKvd5FobrHynt2zimrCuit4sLgLLUEufk=";
           npmBuildScript = "build";
 
           preBuild = ''
