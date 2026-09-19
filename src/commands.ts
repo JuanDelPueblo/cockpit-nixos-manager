@@ -25,16 +25,6 @@ export interface SystemSnapshot {
     generationDiff: string | null;
 }
 
-function messageFromError(error: unknown): string {
-    if (typeof error === "object" && error !== null && "message" in error) {
-        const message = (error as { message?: unknown }).message;
-        if (typeof message === "string")
-            return message;
-    }
-
-    return String(error);
-}
-
 async function optionalSpawn(args: string[], directory?: string): Promise<string | null> {
     try {
         const output = await cockpit.spawn(args, {
@@ -139,33 +129,25 @@ export async function readModuleFile(path: string): Promise<string> {
     }
 }
 
-export async function runRebuild(
-    action: RebuildAction,
-    hostname: string,
-    onData: (data: string) => void,
-): Promise<void> {
+export const REBUILD_TERMINAL_COLS = 100;
+export const REBUILD_TERMINAL_ROWS = 24;
+
+export function startRebuild(action: RebuildAction, hostname: string) {
     const args = ["nh", "os", action, CONFIG_ROOT, "-H", hostname];
-    const process = cockpit.spawn(args, {
+
+    return cockpit.spawn(args, {
         directory: CONFIG_ROOT,
-        err: "out",
+        pty: true,
+        window: {
+            cols: REBUILD_TERMINAL_COLS,
+            rows: REBUILD_TERMINAL_ROWS,
+        },
         environ: [
-            "NO_COLOR=1",
-            "TERM=dumb",
+            "TERM=xterm-256color",
             "GIT_CONFIG_COUNT=1",
             "GIT_CONFIG_KEY_0=safe.directory",
             `GIT_CONFIG_VALUE_0=${CONFIG_ROOT}`,
         ],
         ...(action === "build" ? {} : { superuser: "require" as const }),
     });
-
-    process.stream(data => {
-        onData(data);
-        return data.length;
-    });
-
-    try {
-        await process;
-    } catch (error) {
-        throw new Error(messageFromError(error));
-    }
 }

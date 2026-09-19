@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     Alert,
     Button,
@@ -28,9 +28,9 @@ import {
     loadSnapshot,
     readModuleFile,
     RebuildAction,
-    runRebuild,
     SystemSnapshot,
 } from "./commands.js";
+import { RebuildTerminal } from "./rebuild-terminal.js";
 
 const shortStorePath = (path: string | null): string => {
     if (!path)
@@ -60,7 +60,12 @@ export const Application = () => {
 
     const [pendingAction, setPendingAction] = useState<RebuildAction | null>(null);
     const [runningAction, setRunningAction] = useState<RebuildAction | null>(null);
-    const [actionOutput, setActionOutput] = useState("");
+    const [terminalRun, setTerminalRun] = useState<{
+        id: number;
+        action: RebuildAction;
+        hostname: string;
+    } | null>(null);
+    const nextTerminalRunId = useRef(0);
     const [actionError, setActionError] = useState<string | null>(null);
     const [actionSucceeded, setActionSucceeded] = useState(false);
 
@@ -107,27 +112,31 @@ export const Application = () => {
         setPendingAction(action);
     };
 
-    const executeAction = async (action: RebuildAction) => {
+    const executeAction = (action: RebuildAction) => {
         if (!snapshot)
             return;
 
         setPendingAction(null);
         setRunningAction(action);
-        setActionOutput("");
         setActionError(null);
         setActionSucceeded(false);
+        nextTerminalRunId.current += 1;
+        setTerminalRun({
+            id: nextTerminalRunId.current,
+            action,
+            hostname: snapshot.hostname,
+        });
+    };
 
-        try {
-            await runRebuild(action, snapshot.hostname, data => {
-                setActionOutput(previous => previous + data);
-            });
-            setActionSucceeded(true);
-            await refresh();
-        } catch (error) {
-            setActionError(error instanceof Error ? error.message : String(error));
-        } finally {
-            setRunningAction(null);
-        }
+    const rebuildSucceeded = async () => {
+        setActionSucceeded(true);
+        setRunningAction(null);
+        await refresh();
+    };
+
+    const rebuildFailed = (message: string) => {
+        setActionError(message);
+        setRunningAction(null);
     };
 
     if (loading && !snapshot) {
@@ -325,7 +334,7 @@ export const Application = () => {
                                     </Alert>
                                 )}
 
-                                {(runningAction || actionOutput || actionError || actionSucceeded) && (
+                                {(terminalRun || actionError || actionSucceeded) && (
                                     <div className="action-console">
                                         <div className="console-heading">
                                             <strong>{runningAction ? `${commandTitle[runningAction]} running…` : "Last rebuild"}</strong>
@@ -339,7 +348,16 @@ export const Application = () => {
                                                 {actionError}
                                             </Alert>
                                         )}
-                                        <pre aria-live="polite">{actionOutput || "Waiting for output…"}</pre>
+                                        {terminalRun && (
+                                            <RebuildTerminal
+                                                key={terminalRun.id}
+                                                action={terminalRun.action}
+                                                hostname={terminalRun.hostname}
+                                                runId={terminalRun.id}
+                                                onSuccess={rebuildSucceeded}
+                                                onError={rebuildFailed}
+                                            />
+                                        )}
                                     </div>
                                 )}
                             </CardBody>
