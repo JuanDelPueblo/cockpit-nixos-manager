@@ -2,10 +2,10 @@
     "requires": {
         "cockpit": "137"
     },
-
     "tools": {
         "index": {
-            "label": "Starter Kit"
+            "label": "NixOS Manager",
+            "order": 30
         }
     }
 }

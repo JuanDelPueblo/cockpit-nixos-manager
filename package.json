@@ -1,10 +1,10 @@
 {
-  "name": "starter-kit",
-  "description": "Scaffolding for a cockpit module",
+  "name": "nixos-manager",
+  "description": "Cockpit interface for understanding and operating declarative NixOS systems",
   "type": "module",
   "main": "index.js",
-  "repository": "git@github.com:cockpit/starter-kit.git",
-  "author": "",
+  "repository": "https://github.com/JuanDelPueblo/cockpit-nixos-manager.git",
+  "author": "JuanDelPueblo",
   "license": "LGPL-2.1",
   "engines": {
     "node": ">= 16"
