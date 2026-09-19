@@ -25,150 +25,13 @@ export interface SystemSnapshot {
     generationDiff: string | null;
 }
 
-const ESC = "\u001b";
-
-type TerminalState = "text" | "escape" | "csi" | "osc" | "osc-escape";
-
-class PlainTextTerminal {
-    private line = "";
-    private cursor = 0;
-    private state: TerminalState = "text";
-    private csi = "";
-
-    private writeCharacter(character: string): void {
-        if (this.cursor >= this.line.length) {
-            this.line += " ".repeat(this.cursor - this.line.length) + character;
-        } else {
-            this.line =
-                this.line.slice(0, this.cursor) +
-                character +
-                this.line.slice(this.cursor + 1);
-        }
-
-        this.cursor += 1;
-    }
-
-    private handleCsi(parameters: string, command: string): void {
-        const firstParameter = Number.parseInt(parameters.split(";")[0] || "0", 10);
-
-        switch (command) {
-        case "G":
-            this.cursor = Math.max(0, (firstParameter || 1) - 1);
-            break;
-        case "C":
-            this.cursor += firstParameter || 1;
-            break;
-        case "D":
-            this.cursor = Math.max(0, this.cursor - (firstParameter || 1));
-            break;
-        case "K":
-            if (firstParameter === 2) {
-                this.line = "";
-                this.cursor = 0;
-            } else if (firstParameter === 1) {
-                this.line = this.line.slice(this.cursor + 1);
-                this.cursor = 0;
-            } else {
-                this.line = this.line.slice(0, this.cursor);
-            }
-            break;
-        default:
-            break;
-        }
-    }
-
-    push(data: string): string {
-        let output = "";
-
-        for (const character of data) {
-            switch (this.state) {
-            case "text":
-                if (character === ESC) {
-                    this.state = "escape";
-                } else if (character === "\n") {
-                    output += `${this.line}\n`;
-                    this.line = "";
-                    this.cursor = 0;
-                } else if (character === "\r") {
-                    this.cursor = 0;
-                } else if (character === "\b") {
-                    this.cursor = Math.max(0, this.cursor - 1);
-                } else {
-                    this.writeCharacter(character);
-                }
-                break;
-
-            case "escape":
-                if (character === "[") {
-                    this.csi = "";
-                    this.state = "csi";
-                } else if (character === "]") {
-                    this.state = "osc";
-                } else {
-                    this.state = "text";
-                }
-                break;
-
-            case "csi": {
-                const code = character.charCodeAt(0);
-                this.csi += character;
-
-                if (code >= 0x40 && code <= 0x7e) {
-                    this.handleCsi(this.csi.slice(0, -1), character);
-                    this.csi = "";
-                    this.state = "text";
-                }
-                break;
-            }
-
-            case "osc":
-                if (character === "\u0007")
-                    this.state = "text";
-                else if (character === ESC)
-                    this.state = "osc-escape";
-                break;
-
-            case "osc-escape":
-                this.state = character === "\\" ? "text" : "osc";
-                break;
-            }
-        }
-
-        return output;
-    }
-
-    flush(): string {
-        const output = this.line;
-        this.line = "";
-        this.cursor = 0;
-        this.state = "text";
-        this.csi = "";
-        return output;
-    }
-}
-
-function sanitizeTerminalOutput(data: string): string {
-    const terminal = new PlainTextTerminal();
-    return terminal.push(data) + terminal.flush();
-}
-
-function messageFromError(error: unknown): string {
-    if (typeof error === "object" && error !== null && "message" in error) {
-        const message = (error as { message?: unknown }).message;
-        if (typeof message === "string")
-            return message;
-    }
-
-    return String(error);
-}
-
 async function optionalSpawn(args: string[], directory?: string): Promise<string | null> {
     try {
         const output = await cockpit.spawn(args, {
             err: "message",
             ...(directory ? { directory } : {}),
         });
-        return sanitizeTerminalOutput(output).trim();
+        return output.trim();
     } catch {
         return null;
     }
@@ -266,40 +129,25 @@ export async function readModuleFile(path: string): Promise<string> {
     }
 }
 
-export async function runRebuild(
-    action: RebuildAction,
-    hostname: string,
-    onData: (data: string) => void,
-): Promise<void> {
+export const REBUILD_TERMINAL_COLS = 100;
+export const REBUILD_TERMINAL_ROWS = 24;
+
+export function startRebuild(action: RebuildAction, hostname: string) {
     const args = ["nh", "os", action, CONFIG_ROOT, "-H", hostname];
-    const terminal = new PlainTextTerminal();
-    const process = cockpit.spawn(args, {
+
+    return cockpit.spawn(args, {
         directory: CONFIG_ROOT,
-        err: "out",
+        pty: true,
+        window: {
+            cols: REBUILD_TERMINAL_COLS,
+            rows: REBUILD_TERMINAL_ROWS,
+        },
         environ: [
-            "NO_COLOR=1",
-            "TERM=dumb",
+            "TERM=xterm-256color",
             "GIT_CONFIG_COUNT=1",
             "GIT_CONFIG_KEY_0=safe.directory",
             `GIT_CONFIG_VALUE_0=${CONFIG_ROOT}`,
         ],
         ...(action === "build" ? {} : { superuser: "require" as const }),
     });
-
-    process.stream(data => {
-        const output = terminal.push(data);
-        if (output)
-            onData(output);
-        return data.length;
-    });
-
-    try {
-        await process;
-    } catch (error) {
-        throw new Error(sanitizeTerminalOutput(messageFromError(error)));
-    } finally {
-        const output = terminal.flush();
-        if (output)
-            onData(output);
-    }
 }
