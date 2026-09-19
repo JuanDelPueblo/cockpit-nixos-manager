@@ -26,9 +26,7 @@ import {
     acceptConfirmation,
     CONFIG_ROOT,
     fetchComin,
-    loadModuleFiles,
     loadSnapshot,
-    readModuleFile,
     setCominSuspended,
     submitLatestDeployment,
     SystemSnapshot,
@@ -46,6 +44,13 @@ const sha = (value: string | null): string => value || "Unavailable";
 
 const shortSha = (value: string | null): string => value ? value.slice(0, 12) : "Unavailable";
 
+const commitTitle = (msg: string | null | undefined): string => {
+    if (!msg)
+        return "";
+    const firstLine = msg.trim().split("\n")[0] || "";
+    return firstLine.trim();
+};
+
 const formatTimestamp = (value: string | null): string => {
     if (!value)
         return "Unavailable";
@@ -59,7 +64,7 @@ const statusColor = (status: string | null): "green" | "red" | "blue" | "orange"
 
     if (normalized.includes("fail") || normalized.includes("error"))
         return "red";
-    if (normalized.includes("run") || normalized.includes("eval") || normalized.includes("build"))
+    if (normalized.includes("run") || normalized.includes("eval") || normalized.includes("build") || normalized.includes("deploy"))
         return "blue";
     if (normalized.includes("done") || normalized.includes("success") || normalized.includes("built") || normalized.includes("evaluated"))
         return "green";
@@ -74,11 +79,6 @@ export const Application = () => {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
 
-    const [moduleFiles, setModuleFiles] = useState<string[]>([]);
-    const [selectedModule, setSelectedModule] = useState<string | null>(null);
-    const [moduleContent, setModuleContent] = useState("");
-    const [moduleLoading, setModuleLoading] = useState(false);
-
     const [cominBusy, setCominBusy] = useState(false);
     const [cominError, setCominError] = useState<string | null>(null);
     const [cominSuccessMessage, setCominSuccessMessage] = useState<string | null>(null);
@@ -88,12 +88,8 @@ export const Application = () => {
         setLoadError(null);
 
         try {
-            const [nextSnapshot, files] = await Promise.all([
-                loadSnapshot(),
-                loadModuleFiles(),
-            ]);
+            const nextSnapshot = await loadSnapshot();
             setSnapshot(nextSnapshot);
-            setModuleFiles(files);
         } catch (error) {
             setLoadError(error instanceof Error ? error.message : String(error));
         } finally {
@@ -118,18 +114,6 @@ export const Application = () => {
         return () => clearInterval(timer);
     }, [cominBusy]);
 
-    const openModule = async (path: string) => {
-        setSelectedModule(path);
-        setModuleLoading(true);
-        try {
-            setModuleContent(await readModuleFile(path));
-        } catch (error) {
-            setModuleContent(error instanceof Error ? error.message : String(error));
-        } finally {
-            setModuleLoading(false);
-        }
-    };
-
     const runCominAction = async (action: () => Promise<void>, successText: string) => {
         setCominBusy(true);
         setCominError(null);
@@ -148,7 +132,7 @@ export const Application = () => {
 
     if (loading && !snapshot) {
         return (
-            <Page className="pf-m-no-sidebar">
+            <Page className="pf-m-no-sidebar manager-page">
                 <PageSection className="manager-loading">
                     <Spinner size="lg" />
                 </PageSection>
@@ -184,9 +168,13 @@ export const Application = () => {
         latestDeployment.operation !== "switch"
     );
 
+    const gitCommit = comin?.selectedCommit ?? null;
+    const gitMessage = comin?.selectedCommitMessage || (snapshot?.head === gitCommit ? snapshot?.headSubject : null);
+    const gitTitle = commitTitle(gitMessage);
+
     return (
-        <Page className="pf-m-no-sidebar">
-            <PageSection>
+        <Page className="pf-m-no-sidebar manager-page">
+            <PageSection className="manager-header-section">
                 <div className="manager-heading">
                     <div>
                         <Title headingLevel="h1">NixOS Manager</Title>
@@ -207,7 +195,7 @@ export const Application = () => {
             </PageSection>
 
             {loadError && (
-                <PageSection>
+                <PageSection className="manager-alert-section">
                     <Alert variant="danger" title="Unable to load system state">
                         {loadError}
                     </Alert>
@@ -215,7 +203,7 @@ export const Application = () => {
             )}
 
             {confirmationNeeded && (
-                <PageSection>
+                <PageSection className="manager-alert-section">
                     <Alert
                         variant="warning"
                         title="Comin confirmation required"
@@ -237,7 +225,7 @@ export const Application = () => {
             )}
 
             {comin?.needToReboot && (
-                <PageSection>
+                <PageSection className="manager-alert-section">
                     <Alert variant="warning" title="Reboot required">
                         A successful deployment requires a system reboot to activate changes.
                     </Alert>
@@ -245,7 +233,7 @@ export const Application = () => {
             )}
 
             {cominError && (
-                <PageSection>
+                <PageSection className="manager-alert-section">
                     <Alert variant="danger" isInline title="Comin operation failed">
                         {cominError}
                     </Alert>
@@ -253,12 +241,12 @@ export const Application = () => {
             )}
 
             {cominSuccessMessage && (
-                <PageSection>
+                <PageSection className="manager-alert-section">
                     <Alert variant="success" isInline title={cominSuccessMessage} />
                 </PageSection>
             )}
 
-            <PageSection>
+            <PageSection className="manager-content-section">
                 <Grid hasGutter>
                     {/* GitOps Lifecycle Overview */}
                     <GridItem sm={12}>
@@ -284,129 +272,6 @@ export const Application = () => {
                                 {comin
                                     ? (
                                         <>
-                                            <div className="lifecycle-pipeline">
-                                                {/* Stage 1: Git Remote */}
-                                                <div className="lifecycle-stage">
-                                                    <div className="stage-header">
-                                                        <span className="stage-step">1</span>
-                                                        <strong>Git source</strong>
-                                                    </div>
-                                                    <div className="stage-body">
-                                                        <div>Branch: <code>{comin.selectedBranch || "deploy"}</code></div>
-                                                        <div>Commit: <code>{shortSha(comin.selectedCommit)}</code></div>
-                                                        <div className="stage-meta">
-                                                            Remote: <code>{comin.selectedRemote || "github"}</code>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="lifecycle-separator">→</div>
-
-                                                {/* Stage 2: Fetch */}
-                                                <div className="lifecycle-stage">
-                                                    <div className="stage-header">
-                                                        <span className="stage-step">2</span>
-                                                        <strong>Fetch</strong>
-                                                    </div>
-                                                    <div className="stage-body">
-                                                        <Label color={comin.fetching ? "blue" : "green"}>
-                                                            {comin.fetching ? "Fetch in progress" : "Fetched"}
-                                                        </Label>
-                                                        <div className="stage-meta">
-                                                            {formatTimestamp(comin.remotes[0]?.fetchedAt ?? null)}
-                                                        </div>
-                                                        {comin.remotes[0]?.fetchError && (
-                                                            <div className="comin-error">{comin.remotes[0].fetchError}</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="lifecycle-separator">→</div>
-
-                                                {/* Stage 3: Evaluation */}
-                                                <div className="lifecycle-stage">
-                                                    <div className="stage-header">
-                                                        <span className="stage-step">3</span>
-                                                        <strong>Evaluation</strong>
-                                                    </div>
-                                                    <div className="stage-body">
-                                                        <Label color={statusColor(latestGeneration?.evalStatus ?? null)}>
-                                                            {comin.evaluating
-                                                                ? "Evaluation in progress"
-                                                                : latestGeneration?.evalStatus || "Idle"}
-                                                        </Label>
-                                                        <div className="stage-meta">
-                                                            {formatTimestamp(latestGeneration?.evalEndedAt ?? latestGeneration?.evalStartedAt ?? null)}
-                                                        </div>
-                                                        {latestGeneration?.evalError && (
-                                                            <div className="comin-error">{latestGeneration.evalError}</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="lifecycle-separator">→</div>
-
-                                                {/* Stage 4: Build */}
-                                                <div className="lifecycle-stage">
-                                                    <div className="stage-header">
-                                                        <span className="stage-step">4</span>
-                                                        <strong>Build</strong>
-                                                    </div>
-                                                    <div className="stage-body">
-                                                        <Label color={statusColor(latestGeneration?.buildStatus ?? null)}>
-                                                            {comin.building
-                                                                ? "Build in progress"
-                                                                : latestGeneration?.buildStatus || "Idle"}
-                                                        </Label>
-                                                        <div className="stage-meta">
-                                                            {latestGeneration?.buildReason || "Ready"}
-                                                        </div>
-                                                        {latestGeneration?.buildError && (
-                                                            <div className="comin-error">{latestGeneration.buildError}</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="lifecycle-separator">→</div>
-
-                                                {/* Stage 5: Deployment */}
-                                                <div className="lifecycle-stage">
-                                                    <div className="stage-header">
-                                                        <span className="stage-step">5</span>
-                                                        <strong>Deployment</strong>
-                                                    </div>
-                                                    <div className="stage-body">
-                                                        <Label color={statusColor(latestDeployment?.status ?? null)}>
-                                                            {comin.deploying
-                                                                ? "Deployment in progress"
-                                                                : latestDeployment?.status || "Idle"}
-                                                        </Label>
-                                                        <div className="stage-meta">
-                                                            Operation: <code>{latestDeployment?.operation || "none"}</code>
-                                                        </div>
-                                                        {latestDeployment?.error && (
-                                                            <div className="comin-error">{latestDeployment.error}</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="lifecycle-separator">→</div>
-
-                                                {/* Stage 6: Running System */}
-                                                <div className="lifecycle-stage">
-                                                    <div className="stage-header">
-                                                        <span className="stage-step">6</span>
-                                                        <strong>Running system</strong>
-                                                    </div>
-                                                    <div className="stage-body">
-                                                        <div><code>{shortStorePath(snapshot?.runningSystem ?? null)}</code></div>
-                                                        <div className="stage-meta">
-                                                            {defaultMatchesRunning ? "Matches boot default" : "Differs from boot default"}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
                                             <div className="action-buttons lifecycle-actions">
                                                 <Button
                                                     variant="secondary"
@@ -468,6 +333,112 @@ export const Application = () => {
 
                                                 {cominBusy && <Spinner size="md" />}
                                             </div>
+
+                                            <DescriptionList
+                                                isHorizontal
+                                                columnModifier={{ default: "1Col", md: "2Col", xl: "3Col" }}
+                                                className="lifecycle-description-list"
+                                            >
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Git source</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <div>
+                                                            Branch: <code>{comin.selectedBranch || "deploy"}</code>
+                                                        </div>
+                                                        <div>
+                                                            Commit: <code>{shortSha(comin.selectedCommit)}</code>
+                                                        </div>
+                                                        {gitTitle && (
+                                                            <div className="commit-title-text">
+                                                                {gitTitle}
+                                                            </div>
+                                                        )}
+                                                        <div className="stage-meta">
+                                                            Remote: <code>{comin.selectedRemote || "github"}</code>
+                                                        </div>
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Fetch</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <Label color={comin.fetching ? "blue" : "green"}>
+                                                            {comin.fetching ? "Fetch in progress" : "Fetched"}
+                                                        </Label>
+                                                        <div className="stage-meta">
+                                                            {formatTimestamp(comin.remotes[0]?.fetchedAt ?? null)}
+                                                        </div>
+                                                        {comin.remotes[0]?.fetchError && (
+                                                            <div className="comin-error">{comin.remotes[0].fetchError}</div>
+                                                        )}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Evaluation</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <Label color={statusColor(latestGeneration?.evalStatus ?? null)}>
+                                                            {comin.evaluating
+                                                                ? "Evaluation in progress"
+                                                                : latestGeneration?.evalStatus || "Idle"}
+                                                        </Label>
+                                                        <div className="stage-meta">
+                                                            {formatTimestamp(latestGeneration?.evalEndedAt ?? latestGeneration?.evalStartedAt ?? null)}
+                                                        </div>
+                                                        {latestGeneration?.evalError && (
+                                                            <div className="comin-error">{latestGeneration.evalError}</div>
+                                                        )}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Build</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <Label color={statusColor(latestGeneration?.buildStatus ?? null)}>
+                                                            {comin.building
+                                                                ? "Build in progress"
+                                                                : latestGeneration?.buildStatus || "Idle"}
+                                                        </Label>
+                                                        <div className="stage-meta">
+                                                            {latestGeneration?.buildReason || "Ready"}
+                                                        </div>
+                                                        {latestGeneration?.buildError && (
+                                                            <div className="comin-error">{latestGeneration.buildError}</div>
+                                                        )}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Deployment</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <Label color={statusColor(latestDeployment?.status ?? null)}>
+                                                            {comin.deploying
+                                                                ? "Deployment in progress"
+                                                                : latestDeployment?.status || "Idle"}
+                                                        </Label>
+                                                        <div className="stage-meta">
+                                                            Operation: <code>{latestDeployment?.operation || "none"}</code>
+                                                        </div>
+                                                        {latestDeployment?.error && (
+                                                            <div className="comin-error">{latestDeployment.error}</div>
+                                                        )}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Running system</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <div>
+                                                            <code>{shortStorePath(snapshot?.runningSystem ?? null)}</code>
+                                                        </div>
+                                                        <div className="stage-meta">
+                                                            <Label color={defaultMatchesRunning ? "green" : "orange"}>
+                                                                {defaultMatchesRunning ? "Matches boot default" : "Differs from boot default"}
+                                                            </Label>
+                                                        </div>
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+                                            </DescriptionList>
                                         </>
                                     )
                                     : (
@@ -479,8 +450,8 @@ export const Application = () => {
                         </Card>
                     </GridItem>
 
-                    {/* Declarative and Git State */}
-                    <GridItem sm={12} lg={7}>
+                    {/* Declarative State & Generations */}
+                    <GridItem sm={12} lg={6}>
                         <Card isFullHeight>
                             <CardTitle>Declarative state</CardTitle>
                             <CardBody>
@@ -496,16 +467,23 @@ export const Application = () => {
                                     <DescriptionListGroup>
                                         <DescriptionListTerm>Checkout</DescriptionListTerm>
                                         <DescriptionListDescription>
-                                            <code>{snapshot?.branch || "detached"}</code> @ <code>{sha(snapshot?.head ?? null)}</code>
-                                            {snapshot?.dirtyFiles
-                                                ? (
-                                                    <Label color="orange" className="state-label">
-                                                        {snapshot.dirtyFiles} uncommitted file{snapshot.dirtyFiles === 1 ? "" : "s"}
-                                                    </Label>
-                                                )
-                                                : (
-                                                    <Label color="green" className="state-label">clean</Label>
-                                                )}
+                                            <div>
+                                                <code>{snapshot?.branch || "detached"}</code> @ <code>{sha(snapshot?.head ?? null)}</code>
+                                                {snapshot?.dirtyFiles
+                                                    ? (
+                                                        <Label color="orange" className="state-label">
+                                                            {snapshot.dirtyFiles} uncommitted file{snapshot.dirtyFiles === 1 ? "" : "s"}
+                                                        </Label>
+                                                    )
+                                                    : (
+                                                        <Label color="green" className="state-label">clean</Label>
+                                                    )}
+                                            </div>
+                                            {snapshot?.headSubject && (
+                                                <div className="commit-title-text">
+                                                    {snapshot.headSubject}
+                                                </div>
+                                            )}
                                         </DescriptionListDescription>
                                     </DescriptionListGroup>
                                     <DescriptionListGroup>
@@ -537,80 +515,18 @@ export const Application = () => {
                                             )}
                                         </DescriptionListDescription>
                                     </DescriptionListGroup>
+                                    {!defaultMatchesRunning && snapshot?.generationDiff && (
+                                        <DescriptionListGroup>
+                                            <DescriptionListTerm>Running → boot diff</DescriptionListTerm>
+                                            <DescriptionListDescription>
+                                                <pre className="generation-diff">{snapshot.generationDiff}</pre>
+                                            </DescriptionListDescription>
+                                        </DescriptionListGroup>
+                                    )}
                                 </DescriptionList>
                             </CardBody>
                         </Card>
                     </GridItem>
-
-                    {/* Runtime Health */}
-                    <GridItem sm={12} lg={5}>
-                        <Card isFullHeight>
-                            <CardTitle>Runtime health</CardTitle>
-                            <CardBody>
-                                <div className="health-row">
-                                    <span>Failed systemd units</span>
-                                    <Label color={snapshot?.failedUnits.length ? "red" : "green"}>
-                                        {snapshot?.failedUnits.length ?? 0}
-                                    </Label>
-                                </div>
-                                {snapshot?.failedUnits.length
-                                    ? (
-                                        <pre className="compact-output">{snapshot.failedUnits.join("\n")}</pre>
-                                    )
-                                    : (
-                                        <p className="muted">No failed units reported.</p>
-                                    )}
-                            </CardBody>
-                        </Card>
-                    </GridItem>
-
-                    {/* Past Comin Deployments */}
-                    {comin && comin.pastDeployments.length > 0 && (
-                        <GridItem sm={12}>
-                            <Card>
-                                <CardTitle>Comin deployment retention</CardTitle>
-                                <CardBody>
-                                    <div className="deployment-table-wrapper">
-                                        <table className="pf-v5-c-table pf-m-compact" aria-label="Comin deployments">
-                                            <thead>
-                                                <tr>
-                                                    <th>Ended</th>
-                                                    <th>Operation</th>
-                                                    <th>Status</th>
-                                                    <th>Commit</th>
-                                                    <th>Store path</th>
-                                                    <th>Retention role</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {comin.pastDeployments.map(d => (
-                                                    <tr key={d.uuid}>
-                                                        <td>{formatTimestamp(d.endedAt)}</td>
-                                                        <td><code>{d.operation || "unknown"}</code></td>
-                                                        <td>
-                                                            <Label color={statusColor(d.status)}>
-                                                                {d.status || "unknown"}
-                                                            </Label>
-                                                        </td>
-                                                        <td><code>{shortSha(d.commit)}</code></td>
-                                                        <td><code>{shortStorePath(d.outPath)}</code></td>
-                                                        <td>
-                                                            <div className="retention-badges">
-                                                                {d.isSwitched && <Label color="blue">switched</Label>}
-                                                                {d.isBooted && <Label color="green">booted</Label>}
-                                                                {d.isBootEntry && <Label color="grey">boot entry</Label>}
-                                                                {d.isSuccessful && <Label color="teal">successful</Label>}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </CardBody>
-                            </Card>
-                        </GridItem>
-                    )}
 
                     {/* System Generations History */}
                     <GridItem sm={12} lg={6}>
@@ -628,76 +544,66 @@ export const Application = () => {
                         </Card>
                     </GridItem>
 
-                    {/* Running → Boot Default Diff */}
-                    <GridItem sm={12} lg={6}>
-                        <Card isFullHeight>
-                            <CardTitle>Running → boot default diff</CardTitle>
-                            <CardBody>
-                                {defaultMatchesRunning
-                                    ? (
-                                        <Alert variant="success" isInline title="Running system matches the boot default" />
-                                    )
-                                    : snapshot?.generationDiff
-                                        ? (
-                                            <pre className="generation-diff">{snapshot.generationDiff}</pre>
-                                        )
-                                        : (
-                                            <p className="muted">
-                                                The systems differ, but <code>nvd</code> is unavailable or returned no output.
-                                            </p>
-                                        )}
-                            </CardBody>
-                        </Card>
-                    </GridItem>
-
-                    {/* Dendritic Module Tree Browser */}
-                    <GridItem sm={12}>
-                        <Card>
-                            <CardTitle>Dendritic module tree</CardTitle>
-                            <CardBody>
-                                <p className="muted">
-                                    Read-only view of the real <code>modules/</code> tree. File paths are presentation only;
-                                    the manager does not invent a parallel configuration model.
-                                </p>
-                                <div className="module-browser">
-                                    <div className="module-list" role="navigation" aria-label="Nix modules">
-                                        {moduleFiles.length
-                                            ? moduleFiles.map(path => {
-                                                const relative = path.replace(`${CONFIG_ROOT}/`, "");
-                                                return (
-                                                    <Button
-                                                        key={path}
-                                                        variant="link"
-                                                        isInline
-                                                        className={selectedModule === path ? "selected-module" : ""}
-                                                        onClick={() => openModule(path)}
-                                                    >
-                                                        {relative}
-                                                    </Button>
-                                                );
-                                            })
-                                            : (
-                                                <span className="muted">No module files found.</span>
-                                            )}
+                    {/* Comin Deployment Retention Table */}
+                    {comin && comin.pastDeployments.length > 0 && (
+                        <GridItem sm={12}>
+                            <Card>
+                                <CardTitle>Comin deployment retention</CardTitle>
+                                <CardBody>
+                                    <div className="deployment-table-wrapper">
+                                        <table className="pf-v6-c-table pf-m-compact deployment-table" aria-label="Comin deployments">
+                                            <thead>
+                                                <tr>
+                                                    <th>Ended</th>
+                                                    <th>Operation</th>
+                                                    <th>Status</th>
+                                                    <th>Commit</th>
+                                                    <th>Store path</th>
+                                                    <th>Retention role</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {comin.pastDeployments.map(d => (
+                                                    <tr key={d.uuid}>
+                                                        <td className="table-cell-nowrap">{formatTimestamp(d.endedAt)}</td>
+                                                        <td><code>{d.operation || "unknown"}</code></td>
+                                                        <td>
+                                                            <Label color={statusColor(d.status)}>
+                                                                {d.status || "unknown"}
+                                                            </Label>
+                                                        </td>
+                                                        <td>
+                                                            <div className="commit-cell">
+                                                                <code>{shortSha(d.commit)}</code>
+                                                                {commitTitle(d.commitMessage) && (
+                                                                    <div className="commit-cell-title muted">
+                                                                        {commitTitle(d.commitMessage)}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <span title={d.outPath || undefined}>
+                                                                <code>{shortStorePath(d.outPath)}</code>
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            <div className="retention-badges">
+                                                                {d.isSwitched && <Label color="blue">switched</Label>}
+                                                                {d.isBooted && <Label color="green">booted</Label>}
+                                                                {d.isBootEntry && <Label color="grey">boot entry</Label>}
+                                                                {d.isSuccessful && <Label color="teal">successful</Label>}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
                                     </div>
-                                    <div className="module-source">
-                                        {selectedModule
-                                            ? (
-                                                <>
-                                                    <div className="source-path"><code>{selectedModule}</code></div>
-                                                    {moduleLoading
-                                                        ? <Spinner size="md" />
-                                                        : <pre>{moduleContent}</pre>}
-                                                </>
-                                            )
-                                            : (
-                                                <span className="muted">Select a module to inspect its source.</span>
-                                            )}
-                                    </div>
-                                </div>
-                            </CardBody>
-                        </Card>
-                    </GridItem>
+                                </CardBody>
+                            </Card>
+                        </GridItem>
+                    )}
                 </Grid>
             </PageSection>
         </Page>

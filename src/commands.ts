@@ -100,6 +100,7 @@ export interface SystemSnapshot {
     nixosVersion: string | null;
     branch: string | null;
     head: string | null;
+    headSubject: string | null;
     master: string | null;
     deploy: string | null;
     dirtyFiles: number;
@@ -107,7 +108,6 @@ export interface SystemSnapshot {
     defaultSystem: string | null;
     generations: string | null;
     comin: CominStatus | null;
-    failedUnits: string[];
     generationDiff: string | null;
 }
 
@@ -340,6 +340,7 @@ export async function loadSnapshot(): Promise<SystemSnapshot> {
         nixosVersion,
         branch,
         head,
+        headSubject,
         remoteMaster,
         localMaster,
         deploy,
@@ -348,12 +349,12 @@ export async function loadSnapshot(): Promise<SystemSnapshot> {
         defaultSystem,
         generations,
         comin,
-        failedUnits,
     ] = await Promise.all([
         optionalSpawn(["hostname"]),
         optionalSpawn(["nixos-version"]),
         git("branch", "--show-current"),
         git("rev-parse", "--short=12", "HEAD"),
+        git("log", "-1", "--format=%s", "HEAD"),
         git("rev-parse", "--short=12", "refs/remotes/origin/master"),
         git("rev-parse", "--short=12", "refs/heads/master"),
         git("rev-parse", "--short=12", "refs/remotes/origin/deploy"),
@@ -362,7 +363,6 @@ export async function loadSnapshot(): Promise<SystemSnapshot> {
         optionalSpawn(["readlink", "-f", "/nix/var/nix/profiles/system"]),
         optionalSpawn(["nix-env", "--list-generations", "-p", "/nix/var/nix/profiles/system"]),
         loadCominStatus(),
-        optionalSpawn(["systemctl", "--failed", "--no-legend", "--plain", "--no-pager"]),
     ]);
 
     let generationDiff: string | null = null;
@@ -374,6 +374,7 @@ export async function loadSnapshot(): Promise<SystemSnapshot> {
         nixosVersion,
         branch,
         head,
+        headSubject,
         master: remoteMaster || localMaster,
         deploy,
         dirtyFiles: dirty ? dirty.split("\n").filter(Boolean).length : 0,
@@ -381,40 +382,6 @@ export async function loadSnapshot(): Promise<SystemSnapshot> {
         defaultSystem,
         generations,
         comin,
-        failedUnits: failedUnits ? failedUnits.split("\n").filter(Boolean) : [],
         generationDiff,
     };
-}
-
-export async function loadModuleFiles(): Promise<string[]> {
-    const output = await optionalSpawn([
-        "find",
-        `${CONFIG_ROOT}/modules`,
-        "-type",
-        "f",
-        "-name",
-        "*.nix",
-        "-print",
-    ]);
-
-    if (!output)
-        return [];
-
-    return output
-            .split("\n")
-            .filter(path => path.startsWith(`${CONFIG_ROOT}/modules/`))
-            .sort((a, b) => a.localeCompare(b));
-}
-
-export async function readModuleFile(path: string): Promise<string> {
-    const prefix = `${CONFIG_ROOT}/modules/`;
-    if (!path.startsWith(prefix) || !path.endsWith(".nix"))
-        throw new Error("Refuse to read a path outside the Nix module tree.");
-
-    const file = cockpit.file(path);
-    try {
-        return (await file.read()) ?? "";
-    } finally {
-        file.close();
-    }
 }
