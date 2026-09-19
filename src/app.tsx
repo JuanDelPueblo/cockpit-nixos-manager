@@ -24,10 +24,12 @@ import {
 
 import {
     CONFIG_ROOT,
+    fetchComin,
     loadModuleFiles,
     loadSnapshot,
     readModuleFile,
     RebuildAction,
+    setCominSuspended,
     SystemSnapshot,
 } from "./commands.js";
 import { RebuildTerminal } from "./rebuild-terminal.js";
@@ -41,6 +43,31 @@ const shortStorePath = (path: string | null): string => {
 };
 
 const sha = (value: string | null): string => value || "Unavailable";
+
+const shortSha = (value: string | null): string => value ? value.slice(0, 12) : "Unavailable";
+
+const formatTimestamp = (value: string | null): string => {
+    if (!value)
+        return "Unavailable";
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+};
+
+const statusColor = (status: string | null): "green" | "red" | "blue" | "orange" | "grey" => {
+    const normalized = status?.toLowerCase() ?? "";
+
+    if (normalized.includes("fail") || normalized.includes("error"))
+        return "red";
+    if (normalized.includes("run") || normalized.includes("eval") || normalized.includes("build"))
+        return "blue";
+    if (normalized.includes("done") || normalized.includes("success") || normalized.includes("succeed"))
+        return "green";
+    if (normalized.includes("wait") || normalized.includes("pending"))
+        return "orange";
+
+    return "grey";
+};
 
 const commandTitle: Record<RebuildAction, string> = {
     build: "Build",
@@ -68,6 +95,8 @@ export const Application = () => {
     const nextTerminalRunId = useRef(0);
     const [actionError, setActionError] = useState<string | null>(null);
     const [actionSucceeded, setActionSucceeded] = useState(false);
+    const [cominBusy, setCominBusy] = useState(false);
+    const [cominError, setCominError] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -137,6 +166,20 @@ export const Application = () => {
     const rebuildFailed = (message: string) => {
         setActionError(message);
         setRunningAction(null);
+    };
+
+    const runCominMutation = async (mutation: () => Promise<void>) => {
+        setCominBusy(true);
+        setCominError(null);
+
+        try {
+            await mutation();
+            await refresh();
+        } catch (error) {
+            setCominError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setCominBusy(false);
+        }
     };
 
     if (loading && !snapshot) {
@@ -260,14 +303,211 @@ export const Application = () => {
                                     : (
                                         <p className="muted">No failed units reported.</p>
                                     )}
+                            </CardBody>
+                        </Card>
+                    </GridItem>
 
-                                <h3 className="section-heading">Comin</h3>
-                                {snapshot?.cominStatus
+                    <GridItem sm={12}>
+                        <Card>
+                            <CardTitle>
+                                <div className="card-title-row">
+                                    <span>Comin GitOps</span>
+                                    {snapshot?.comin
+                                        ? (
+                                            <Label color={snapshot.comin.suspended ? "orange" : "green"}>
+                                                {snapshot.comin.suspended ? "Suspended" : "Active"}
+                                            </Label>
+                                        )
+                                        : <Label color="grey">Unavailable</Label>}
+                                </div>
+                            </CardTitle>
+                            <CardBody>
+                                {snapshot?.comin
                                     ? (
-                                        <pre className="compact-output">{snapshot.cominStatus}</pre>
+                                        <>
+                                            <div className="action-buttons">
+                                                <Button
+                                                    variant="secondary"
+                                                    onClick={() => runCominMutation(fetchComin)}
+                                                    isDisabled={cominBusy}
+                                                >
+                                                    Fetch now
+                                                </Button>
+                                                <Button
+                                                    variant={snapshot.comin.suspended ? "primary" : "danger"}
+                                                    onClick={() => runCominMutation(
+                                                        () => setCominSuspended(!snapshot.comin?.suspended)
+                                                    )}
+                                                    isDisabled={cominBusy}
+                                                >
+                                                    {snapshot.comin.suspended ? "Enable GitOps" : "Disable GitOps"}
+                                                </Button>
+                                                {cominBusy && <Spinner size="md" />}
+                                            </div>
+
+                                            <p className="muted">
+                                                Disabling GitOps uses Comin&apos;s native suspend operation. The daemon
+                                                remains running so its state stays visible and it can be enabled again.
+                                            </p>
+
+                                            {cominError && (
+                                                <Alert variant="danger" isInline title="Comin command failed">
+                                                    {cominError}
+                                                </Alert>
+                                            )}
+
+                                            <DescriptionList isHorizontal className="comin-details">
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>State</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <div className="comin-status-labels">
+                                                            <Label color={snapshot.comin.suspended ? "orange" : "green"}>
+                                                                {snapshot.comin.suspended ? "Suspended" : "Active"}
+                                                            </Label>
+                                                            {snapshot.comin.fetching && <Label color="blue">Fetching</Label>}
+                                                            {snapshot.comin.evaluating && <Label color="blue">Evaluating</Label>}
+                                                            {snapshot.comin.building && <Label color="blue">Building</Label>}
+                                                            {snapshot.comin.deploying && <Label color="blue">Deploying</Label>}
+                                                            {snapshot.comin.needToReboot && <Label color="orange">Reboot required</Label>}
+                                                        </div>
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                {snapshot.comin.remotes.map((remote, index) => (
+                                                    <DescriptionListGroup key={`${remote.name}-${index}`}>
+                                                        <DescriptionListTerm>
+                                                            {snapshot.comin!.remotes.length === 1 ? "Remote" : `Remote ${index + 1}`}
+                                                        </DescriptionListTerm>
+                                                        <DescriptionListDescription>
+                                                            <div><strong>{remote.name}</strong> <code>{remote.url}</code></div>
+                                                            <div className="muted">
+                                                                {remote.fetched ? "Fetched" : "Last fetch"} {formatTimestamp(remote.fetchedAt)}
+                                                            </div>
+                                                            {remote.fetchError && <div className="comin-error">{remote.fetchError}</div>}
+                                                        </DescriptionListDescription>
+                                                    </DescriptionListGroup>
+                                                ))}
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Selected commit</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        <div>
+                                                            <code>
+                                                                {snapshot.comin.selectedRemote || "?"}/{snapshot.comin.selectedBranch || "?"}
+                                                            </code>
+                                                            {" @ "}
+                                                            <code>{shortSha(snapshot.comin.selectedCommit)}</code>
+                                                        </div>
+                                                        {snapshot.comin.selectedCommitMessage && (
+                                                            <div className="commit-message">{snapshot.comin.selectedCommitMessage}</div>
+                                                        )}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Evaluation</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        {snapshot.comin.generation
+                                                            ? (
+                                                                <>
+                                                                    <Label color={statusColor(snapshot.comin.generation.evalStatus)}>
+                                                                        {snapshot.comin.evaluating
+                                                                            ? "Evaluating"
+                                                                            : snapshot.comin.generation.evalStatus || "Unknown"}
+                                                                    </Label>
+                                                                    <span className="comin-detail">
+                                                                        {formatTimestamp(
+                                                                            snapshot.comin.generation.evalEndedAt ||
+                                                                            snapshot.comin.generation.evalStartedAt
+                                                                        )}
+                                                                    </span>
+                                                                    {snapshot.comin.generation.drvPath && (
+                                                                        <div><code>{snapshot.comin.generation.drvPath}</code></div>
+                                                                    )}
+                                                                    {snapshot.comin.generation.evalError && (
+                                                                        <div className="comin-error">{snapshot.comin.generation.evalError}</div>
+                                                                    )}
+                                                                </>
+                                                            )
+                                                            : "No evaluated generation."}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Build</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        {snapshot.comin.generation
+                                                            ? (
+                                                                <>
+                                                                    <Label color={statusColor(snapshot.comin.generation.buildStatus)}>
+                                                                        {snapshot.comin.building
+                                                                            ? "Building"
+                                                                            : snapshot.comin.generation.buildStatus || "Unknown"}
+                                                                    </Label>
+                                                                    <span className="comin-detail">
+                                                                        {formatTimestamp(
+                                                                            snapshot.comin.generation.buildEndedAt ||
+                                                                            snapshot.comin.generation.buildStartedAt
+                                                                        )}
+                                                                    </span>
+                                                                    {snapshot.comin.generation.outPath && (
+                                                                        <div><code>{snapshot.comin.generation.outPath}</code></div>
+                                                                    )}
+                                                                    {snapshot.comin.generation.buildError && (
+                                                                        <div className="comin-error">{snapshot.comin.generation.buildError}</div>
+                                                                    )}
+                                                                </>
+                                                            )
+                                                            : "No build available."}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+
+                                                <DescriptionListGroup>
+                                                    <DescriptionListTerm>Deployment</DescriptionListTerm>
+                                                    <DescriptionListDescription>
+                                                        {snapshot.comin.deployment
+                                                            ? (
+                                                                <>
+                                                                    <Label color={statusColor(snapshot.comin.deployment.status)}>
+                                                                        {snapshot.comin.deploying
+                                                                            ? "Deploying"
+                                                                            : snapshot.comin.deployment.status || "Unknown"}
+                                                                    </Label>
+                                                                    {snapshot.comin.deployment.operation && (
+                                                                        <span className="comin-detail">
+                                                                            Operation <code>{snapshot.comin.deployment.operation}</code>
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="comin-detail">
+                                                                        {formatTimestamp(
+                                                                            snapshot.comin.deployment.endedAt ||
+                                                                            snapshot.comin.deployment.startedAt
+                                                                        )}
+                                                                    </span>
+                                                                    {snapshot.comin.deployment.profilePath && (
+                                                                        <div><code>{snapshot.comin.deployment.profilePath}</code></div>
+                                                                    )}
+                                                                    {snapshot.comin.deployment.error && (
+                                                                        <div className="comin-error">{snapshot.comin.deployment.error}</div>
+                                                                    )}
+                                                                </>
+                                                            )
+                                                            : "No deployment available."}
+                                                    </DescriptionListDescription>
+                                                </DescriptionListGroup>
+                                            </DescriptionList>
+
+                                            {snapshot.comin.repositoryError && (
+                                                <Alert variant="danger" isInline title="Repository error">
+                                                    {snapshot.comin.repositoryError}
+                                                </Alert>
+                                            )}
+                                        </>
                                     )
                                     : (
-                                        <p className="muted">Comin status is unavailable on this host.</p>
+                                        <p className="muted">
+                                            Comin is unavailable or its local API could not be reached.
+                                        </p>
                                     )}
                             </CardBody>
                         </Card>
