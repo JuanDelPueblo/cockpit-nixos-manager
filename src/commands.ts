@@ -6,8 +6,6 @@ import cockpit from "cockpit";
 
 export const CONFIG_ROOT = "/etc/nixos";
 
-export type RebuildAction = "build" | "test" | "switch";
-
 export interface CominRemoteStatus {
     name: string;
     url: string;
@@ -31,19 +29,47 @@ export interface CominGenerationStatus {
     drvPath: string | null;
     outPath: string | null;
     buildStatus: string | null;
+    buildReason: string | null;
     buildStartedAt: string | null;
     buildEndedAt: string | null;
     buildError: string | null;
 }
 
 export interface CominDeploymentStatus {
+    uuid: string | null;
     status: string | null;
     operation: string | null;
+    operationSubmitted: string | null;
+    reason: string | null;
     startedAt: string | null;
     endedAt: string | null;
     profilePath: string | null;
     error: string | null;
     generation: CominGenerationStatus | null;
+}
+
+export interface CominConfirmerStatus {
+    mode: "manual" | "auto" | "without";
+    submitted: string | null;
+    confirmed: string | null;
+    autoConfirmDuration: number;
+    autoConfirmStartedAt: string | null;
+    autoConfirmStarted: boolean;
+}
+
+export interface CominStoreDeployment {
+    uuid: string;
+    status: string | null;
+    operation: string | null;
+    endedAt: string | null;
+    profilePath: string | null;
+    outPath: string | null;
+    commit: string | null;
+    commitMessage: string | null;
+    isBootEntry: boolean;
+    isSuccessful: boolean;
+    isSwitched: boolean;
+    isBooted: boolean;
 }
 
 export interface CominStatus {
@@ -62,12 +88,16 @@ export interface CominStatus {
     generation: CominGenerationStatus | null;
     deployment: CominDeploymentStatus | null;
     repositoryError: string | null;
+    buildConfirmer: CominConfirmerStatus | null;
+    deployConfirmer: CominConfirmerStatus | null;
+    deploymentSwitched: string | null;
+    deploymentBooted: string | null;
+    pastDeployments: CominStoreDeployment[];
 }
 
 export interface SystemSnapshot {
     hostname: string;
     nixosVersion: string | null;
-    nhVersion: string | null;
     branch: string | null;
     head: string | null;
     master: string | null;
@@ -138,9 +168,36 @@ function parseCominGeneration(value: unknown): CominGenerationStatus | null {
         drvPath: jsonString(generation.drv_path),
         outPath: jsonString(generation.out_path),
         buildStatus: jsonString(generation.build_status),
+        buildReason: jsonString(generation.build_reason),
         buildStartedAt: jsonString(generation.build_started_at),
         buildEndedAt: jsonString(generation.build_ended_at),
         buildError: jsonString(generation.build_err),
+    };
+}
+
+function parseConfirmer(value: unknown): CominConfirmerStatus | null {
+    if (!value)
+        return null;
+
+    const obj = jsonObject(value);
+    const modeRaw = obj.mode;
+    let mode: "manual" | "auto" | "without" = "without";
+    if (modeRaw === 0 || modeRaw === "0" || modeRaw === "manual")
+        mode = "manual";
+    else if (modeRaw === 1 || modeRaw === "1" || modeRaw === "auto")
+        mode = "auto";
+    else if (modeRaw === 2 || modeRaw === "2" || modeRaw === "without")
+        mode = "without";
+
+    return {
+        mode,
+        submitted: jsonString(obj.submitted),
+        confirmed: jsonString(obj.confirmed),
+        autoConfirmDuration: typeof obj.autoconfirm_duration === "number"
+            ? obj.autoconfirm_duration
+            : Number(obj.autoconfirm_duration || 0),
+        autoConfirmStartedAt: jsonString(obj.autoconfirm_started_at),
+        autoConfirmStarted: jsonBoolean(obj.autoconfirm_started),
     };
 }
 
@@ -152,6 +209,7 @@ function parseCominStatus(output: string): CominStatus | null {
         const fetcher = jsonObject(state.fetcher);
         const repository = jsonObject(fetcher.repository_status);
         const deployment = jsonObject(deployer.deployment);
+        const store = jsonObject(state.store);
 
         const remotes = Array.isArray(repository.remotes)
             ? repository.remotes.map(remoteValue => {
@@ -165,6 +223,37 @@ function parseCominStatus(output: string): CominStatus | null {
                     fetchError: jsonString(remote.fetch_error_msg),
                     mainBranch: jsonString(main.name),
                     mainCommit: jsonString(main.commit_id),
+                };
+            })
+            : [];
+
+        const deploymentSwitched = jsonString(store.deployment_switched);
+        const deploymentBooted = jsonString(store.deployment_booted);
+        const deploymentsBootEntry = Array.isArray(store.deployments_boot_entry)
+            ? store.deployments_boot_entry.map(String)
+            : [];
+        const deploymentsSuccessful = Array.isArray(store.deployments_successful)
+            ? store.deployments_successful.map(String)
+            : [];
+
+        const pastDeployments: CominStoreDeployment[] = Array.isArray(store.deployments)
+            ? store.deployments.map(dVal => {
+                const d = jsonObject(dVal);
+                const gen = jsonObject(d.generation);
+                const uuid = jsonString(d.uuid) ?? "";
+                return {
+                    uuid,
+                    status: jsonString(d.status),
+                    operation: jsonString(d.operation),
+                    endedAt: jsonString(d.ended_at),
+                    profilePath: jsonString(d.profile_path),
+                    outPath: jsonString(gen.out_path),
+                    commit: jsonString(gen.selected_commit_id),
+                    commitMessage: jsonString(gen.selected_commit_msg),
+                    isBootEntry: deploymentsBootEntry.includes(uuid),
+                    isSuccessful: deploymentsSuccessful.includes(uuid),
+                    isSwitched: uuid === deploymentSwitched,
+                    isBooted: uuid === deploymentBooted,
                 };
             })
             : [];
@@ -185,8 +274,11 @@ function parseCominStatus(output: string): CominStatus | null {
             generation: parseCominGeneration(builder.generation),
             deployment: Object.keys(deployment).length
                 ? {
+                    uuid: jsonString(deployment.uuid),
                     status: jsonString(deployment.status),
                     operation: jsonString(deployment.operation),
+                    operationSubmitted: jsonString(deployment.operation_submitted),
+                    reason: jsonString(deployment.reason),
                     startedAt: jsonString(deployment.started_at),
                     endedAt: jsonString(deployment.ended_at),
                     profilePath: jsonString(deployment.profile_path),
@@ -195,6 +287,11 @@ function parseCominStatus(output: string): CominStatus | null {
                 }
                 : null,
             repositoryError: jsonString(repository.error_msg),
+            buildConfirmer: parseConfirmer(state.build_confirmer),
+            deployConfirmer: parseConfirmer(state.deploy_confirmer),
+            deploymentSwitched,
+            deploymentBooted,
+            pastDeployments,
         };
     } catch {
         return null;
@@ -218,18 +315,29 @@ async function requiredSpawn(args: string[], superuser = false): Promise<void> {
 }
 
 export async function setCominSuspended(suspended: boolean): Promise<void> {
-    await requiredSpawn(["comin", suspended ? "suspend" : "resume"], true);
+    await requiredSpawn(["comin", suspended ? "suspend" : "resume"]);
 }
 
 export async function fetchComin(): Promise<void> {
     await requiredSpawn(["comin", "fetch"]);
 }
 
+export async function submitLatestDeployment(operation?: "switch" | "boot" | "test"): Promise<void> {
+    const args = ["comin", "deployment", "submit-latest"];
+    if (operation)
+        args.push("--operation", operation);
+
+    await requiredSpawn(args);
+}
+
+export async function acceptConfirmation(): Promise<void> {
+    await requiredSpawn(["comin", "confirmation", "accept"]);
+}
+
 export async function loadSnapshot(): Promise<SystemSnapshot> {
     const [
         hostname,
         nixosVersion,
-        nhVersion,
         branch,
         head,
         remoteMaster,
@@ -244,7 +352,6 @@ export async function loadSnapshot(): Promise<SystemSnapshot> {
     ] = await Promise.all([
         optionalSpawn(["hostname"]),
         optionalSpawn(["nixos-version"]),
-        optionalSpawn(["nh", "--version"]),
         git("branch", "--show-current"),
         git("rev-parse", "--short=12", "HEAD"),
         git("rev-parse", "--short=12", "refs/remotes/origin/master"),
@@ -265,7 +372,6 @@ export async function loadSnapshot(): Promise<SystemSnapshot> {
     return {
         hostname: hostname || "unknown",
         nixosVersion,
-        nhVersion,
         branch,
         head,
         master: remoteMaster || localMaster,
@@ -303,7 +409,7 @@ export async function loadModuleFiles(): Promise<string[]> {
 export async function readModuleFile(path: string): Promise<string> {
     const prefix = `${CONFIG_ROOT}/modules/`;
     if (!path.startsWith(prefix) || !path.endsWith(".nix"))
-        throw new Error("Refusing to read a path outside the Nix module tree.");
+        throw new Error("Refuse to read a path outside the Nix module tree.");
 
     const file = cockpit.file(path);
     try {
@@ -311,27 +417,4 @@ export async function readModuleFile(path: string): Promise<string> {
     } finally {
         file.close();
     }
-}
-
-export const REBUILD_TERMINAL_COLS = 100;
-export const REBUILD_TERMINAL_ROWS = 24;
-
-export function startRebuild(action: RebuildAction, hostname: string) {
-    const args = ["nh", "os", action, CONFIG_ROOT, "-H", hostname];
-
-    return cockpit.spawn(args, {
-        directory: CONFIG_ROOT,
-        pty: true,
-        window: {
-            cols: REBUILD_TERMINAL_COLS,
-            rows: REBUILD_TERMINAL_ROWS,
-        },
-        environ: [
-            "TERM=xterm-256color",
-            "GIT_CONFIG_COUNT=1",
-            "GIT_CONFIG_KEY_0=safe.directory",
-            `GIT_CONFIG_VALUE_0=${CONFIG_ROOT}`,
-        ],
-        ...(action === "build" ? {} : { superuser: "require" as const }),
-    });
 }

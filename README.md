@@ -1,28 +1,27 @@
 # Cockpit NixOS Manager
 
-A small Cockpit interface for understanding and operating a declarative NixOS system without replacing the Nix configuration model.
+A small Cockpit interface to inspect and operate declarative NixOS GitOps systems.
 
-The project is intentionally oriented around Git-backed flakes and a dendritic-style repository. It reads the real checkout and system state instead of maintaining a second configuration database.
+The project operates on Git-backed flakes and a dendritic repository. It reads the real checkout and system state without a second configuration database.
 
-## MVP
+## Features
 
-The current MVP targets a local NixOS checkout at `/etc/nixos` and provides:
+The interface connects to a local NixOS checkout at `/etc/nixos` and provides:
 
-- host, NixOS, Git `master`/`deploy`, and dirty-checkout status;
-- running system vs boot-default system;
-- Comin status and failed systemd units;
+- Host, NixOS version, Git `master`/`deploy` refs, and dirty checkout status;
+- Comin GitOps lifecycle visualization: Git source → fetch → evaluation → build → deployment → running system;
+- Native Comin actions: immediate fetch, suspend, resume, confirmation accept, and live switch;
+- Running system store path vs boot-default system store path;
+- Failed systemd units list;
 - NixOS generation history;
-- an `nvd` diff when the running and default systems differ;
-- a read-only browser for `/etc/nixos/modules/**/*.nix`;
-- fixed `nh os build`, `nh os test`, and `nh os switch` actions with streamed output.
+- An `nvd` diff when the running and default systems differ;
+- A read-only browser for `/etc/nixos/modules/**/*.nix`.
 
-`test` and `switch` request Cockpit administrative access. The frontend cannot provide an arbitrary command, Nix expression, or path to the privileged operation.
-
-The manager does **not** edit Nix files, mutate SOPS secrets, advance Git branches, run `comin fetch`, or expose a root shell.
+The manager does not edit Nix files, change SOPS secrets, or expose a root shell.
 
 ## Nix packaging
 
-The repository is a flake and exposes both a package and a small NixOS module:
+The repository is a flake and provides both a package and a NixOS module:
 
 ```nix
 inputs.cockpit-nixos-manager.url = "github:JuanDelPueblo/cockpit-nixos-manager";
@@ -36,56 +35,55 @@ services.cockpit.plugins = [
 ];
 ```
 
-Or import the provided module, which adds the package to `services.cockpit.plugins`:
+Or import the provided module:
 
 ```nix
 imports = [ inputs.cockpit-nixos-manager.nixosModules.default ];
 ```
 
-The package builds the frontend reproducibly from the committed npm lockfile and the same pinned Cockpit helper sources used by the upstream starter kit.
+The package builds the frontend from the committed npm lockfile and Cockpit helper sources.
 
 ## Development
 
-This is based on the official Cockpit starter kit.
-
-Install the usual Cockpit frontend build dependencies, then:
+Install Cockpit build dependencies, then run:
 
 ```bash
 make
 make devel-install
 ```
 
-This exposes the built plugin as `nixos-manager` in the local user's Cockpit package search path. Reload Cockpit after rebuilding.
+This installs the built plugin as `nixos-manager` in the local Cockpit search path. Reload Cockpit after a build.
 
-For live rebuilding:
+For continuous build:
 
 ```bash
 make watch
 ```
 
-The target host should provide `git`, `nh`, Nix tooling, and optionally `comin` and `nvd`. Missing optional tools are shown as unavailable rather than preventing the page from loading.
+The target host requires `git`, Nix tooling, `comin`, and optionally `nvd`. Missing optional tools appear as unavailable.
 
 ## Current assumptions
 
-- configuration checkout: `/etc/nixos`
-- NixOS flake output name: the local hostname
-- dendritic modules: `/etc/nixos/modules`
+- Configuration checkout: `/etc/nixos`
+- NixOS flake output name: local hostname
+- Dendritic modules: `/etc/nixos/modules`
 - Git deployment branches: `master` and `deploy`
-- system profile: `/nix/var/nix/profiles/system`
-
-These are deliberately simple MVP assumptions, not a new configuration schema. If the project becomes useful outside this fleet, they can become declarative package settings later.
+- System profile: `/nix/var/nix/profiles/system`
 
 ## Safety boundary
 
-Read-only inspection executes fixed commands directly through Cockpit. Rebuild actions are also fixed argument arrays:
+Inspection executes fixed commands directly through Cockpit. Comin actions execute fixed argument arrays:
 
 ```text
-nh os build  /etc/nixos -H <hostname>
-nh os test   /etc/nixos -H <hostname>
-nh os switch /etc/nixos -H <hostname>
+comin status --json
+comin fetch
+comin suspend
+comin resume
+comin confirmation accept
+comin deployment submit-latest [--operation switch]
 ```
 
-Only the hostname read from the machine is variable. There is no free-form shell or generic command endpoint.
+There is no free-form shell or generic command endpoint.
 
 ## License
 

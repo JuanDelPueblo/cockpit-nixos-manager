@@ -1,0 +1,45 @@
+{
+  "nodes": {
+    "cockpit-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789539478,
+        "narHash": "sha256-sBoCKNSlFO9EZ3US03mEFHXqnBirf2XlL2qW6DHv02g=",
+        "owner": "cockpit-project",
+        "repo": "cockpit",
+        "rev": "78afe1d587afb6b380e1b8999a0955ad09c31902",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cockpit-project",
+        "repo": "cockpit",
+        "rev": "78afe1d587afb6b380e1b8999a0955ad09c31902",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1789785513,
+        "narHash": "sha256-B44WL6h0XoLjJ41bUPJk0X5SDinLCII//6EcBLXKiJ0=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "20b1ddd1aa5ace70c9468305030aa4f9ef79671b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "cockpit-src": "cockpit-src",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
