@@ -20,6 +20,30 @@ The current MVP targets a local NixOS checkout at `/etc/nixos` and provides:
 
 The manager does **not** edit Nix files, mutate SOPS secrets, advance Git branches, run `comin fetch`, or expose a root shell.
 
+## Nix packaging
+
+The repository is a flake and exposes both a package and a small NixOS module:
+
+```nix
+inputs.cockpit-nixos-manager.url = "github:JuanDelPueblo/cockpit-nixos-manager";
+```
+
+To install only the Cockpit package:
+
+```nix
+services.cockpit.plugins = [
+  inputs.cockpit-nixos-manager.packages.${pkgs.stdenv.hostPlatform.system}.default
+];
+```
+
+Or import the provided module, which adds the package to `services.cockpit.plugins`:
+
+```nix
+imports = [ inputs.cockpit-nixos-manager.nixosModules.default ];
+```
+
+The package builds the frontend reproducibly from the committed npm lockfile and the same pinned Cockpit helper sources used by the upstream starter kit.
+
 ## Development
 
 This is based on the official Cockpit starter kit.
