@@ -19,6 +19,8 @@ jobs:
         with:
           node-version: "22"
 
+      - uses: DeterminateSystems/nix-installer-action@v22
+
       - name: Build
         run: make
 
@@ -27,3 +29,6 @@ jobs:
 
       - name: Lint styles
         run: npm run stylelint
+
+      - name: Build Nix package
+        run: nix build .#cockpit-nixos-manager --no-write-lock-file

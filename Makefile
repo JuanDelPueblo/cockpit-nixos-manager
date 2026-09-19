@@ -13,7 +13,7 @@ PREFIX ?= /usr/local
 APPSTREAMFILE=org.cockpit_project.$(subst -,_,$(PACKAGE_NAME)).metainfo.xml
 VM_IMAGE=$(CURDIR)/test/images/$(TEST_OS)
 # stamp file to check for node_modules/
-NODE_MODULES_TEST=package-lock.json
+NODE_MODULES_TEST=node_modules/.package-lock.json
 # build.js ran in non-watch mode
 DIST_TEST=runtime-npm-modules.txt
 # one example file in pkg/lib to check if it was already checked out
@@ -193,11 +193,8 @@ codecheck: test/common $(NODE_MODULES_TEST)
 bots: $(COCKPIT_REPO_STAMP)
 	test/common/make-bots
 
-$(NODE_MODULES_TEST): package.json
-	# if it exists already, npm install won't update it; force that so that we always get up-to-date packages
-	rm -f package-lock.json
-	# unset NODE_ENV, skips devDependencies otherwise; this often hangs, so try a few times
-	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm install --ignore-scripts && exit 0; done; exit 1
-	env -u NODE_ENV npm prune
+$(NODE_MODULES_TEST): package.json package-lock.json
+	# Install exactly the dependency graph committed in package-lock.json.
+	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm ci --ignore-scripts && exit 0; done; exit 1
 
 .PHONY: all clean install devel-install devel-uninstall print-version dist node-cache rpm prepare-check check vm print-vm
