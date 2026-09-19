@@ -83,7 +83,7 @@ export const Application = () => {
     }, []);
 
     useEffect(() => {
-        void refresh();
+        refresh();
     }, [refresh]);
 
     const openModule = async (path: string) => {
@@ -100,7 +100,7 @@ export const Application = () => {
 
     const startAction = (action: RebuildAction) => {
         if (action === "build") {
-            void executeAction(action);
+            executeAction(action);
             return;
         }
 
@@ -156,7 +156,7 @@ export const Application = () => {
                             Inspect and manually apply the declarative configuration in <code>{CONFIG_ROOT}</code>.
                         </p>
                     </div>
-                    <Button variant="secondary" onClick={() => void refresh()} isDisabled={loading || Boolean(runningAction)}>
+                    <Button variant="secondary" onClick={() => refresh()} isDisabled={loading || Boolean(runningAction)}>
                         {loading ? "Refreshing…" : "Refresh"}
                     </Button>
                 </div>
@@ -189,13 +189,15 @@ export const Application = () => {
                                         <DescriptionListTerm>Checkout</DescriptionListTerm>
                                         <DescriptionListDescription>
                                             <code>{snapshot?.branch || "detached"}</code> @ <code>{sha(snapshot?.head ?? null)}</code>
-                                            {snapshot?.dirtyFiles ? (
-                                                <Label color="orange" className="state-label">
-                                                    {snapshot.dirtyFiles} uncommitted file{snapshot.dirtyFiles === 1 ? "" : "s"}
-                                                </Label>
-                                            ) : (
-                                                <Label color="green" className="state-label">clean</Label>
-                                            )}
+                                            {snapshot?.dirtyFiles
+                                                ? (
+                                                    <Label color="orange" className="state-label">
+                                                        {snapshot.dirtyFiles} uncommitted file{snapshot.dirtyFiles === 1 ? "" : "s"}
+                                                    </Label>
+                                                )
+                                                : (
+                                                    <Label color="green" className="state-label">clean</Label>
+                                                )}
                                         </DescriptionListDescription>
                                     </DescriptionListGroup>
                                     <DescriptionListGroup>
@@ -242,18 +244,22 @@ export const Application = () => {
                                         {snapshot?.failedUnits.length ?? 0}
                                     </Label>
                                 </div>
-                                {snapshot?.failedUnits.length ? (
-                                    <pre className="compact-output">{snapshot.failedUnits.join("\n")}</pre>
-                                ) : (
-                                    <p className="muted">No failed units reported.</p>
-                                )}
+                                {snapshot?.failedUnits.length
+                                    ? (
+                                        <pre className="compact-output">{snapshot.failedUnits.join("\n")}</pre>
+                                    )
+                                    : (
+                                        <p className="muted">No failed units reported.</p>
+                                    )}
 
                                 <h3 className="section-heading">Comin</h3>
-                                {snapshot?.cominStatus ? (
-                                    <pre className="compact-output">{snapshot.cominStatus}</pre>
-                                ) : (
-                                    <p className="muted">Comin status is unavailable on this host.</p>
-                                )}
+                                {snapshot?.cominStatus
+                                    ? (
+                                        <pre className="compact-output">{snapshot.cominStatus}</pre>
+                                    )
+                                    : (
+                                        <p className="muted">Comin status is unavailable on this host.</p>
+                                    )}
                             </CardBody>
                         </Card>
                     </GridItem>
@@ -304,7 +310,7 @@ export const Application = () => {
                                         title={`Confirm ${commandTitle[pendingAction].toLowerCase()}`}
                                         actionLinks={
                                             <>
-                                                <Button variant="link" onClick={() => void executeAction(pendingAction)}>
+                                                <Button variant="link" onClick={() => executeAction(pendingAction)}>
                                                     {commandTitle[pendingAction]} now
                                                 </Button>
                                                 <Button variant="link" onClick={() => setPendingAction(null)}>
@@ -344,11 +350,13 @@ export const Application = () => {
                         <Card isFullHeight>
                             <CardTitle>System generations</CardTitle>
                             <CardBody>
-                                {snapshot?.generations ? (
-                                    <pre className="generation-list">{snapshot.generations}</pre>
-                                ) : (
-                                    <p className="muted">Generation history is unavailable.</p>
-                                )}
+                                {snapshot?.generations
+                                    ? (
+                                        <pre className="generation-list">{snapshot.generations}</pre>
+                                    )
+                                    : (
+                                        <p className="muted">Generation history is unavailable.</p>
+                                    )}
                             </CardBody>
                         </Card>
                     </GridItem>
@@ -357,15 +365,19 @@ export const Application = () => {
                         <Card isFullHeight>
                             <CardTitle>Running → boot default diff</CardTitle>
                             <CardBody>
-                                {defaultMatchesRunning ? (
-                                    <Alert variant="success" isInline title="Running system matches the boot default" />
-                                ) : snapshot?.generationDiff ? (
-                                    <pre className="generation-diff">{snapshot.generationDiff}</pre>
-                                ) : (
-                                    <p className="muted">
-                                        The systems differ, but <code>nvd</code> is unavailable or did not return a diff.
-                                    </p>
-                                )}
+                                {defaultMatchesRunning
+                                    ? (
+                                        <Alert variant="success" isInline title="Running system matches the boot default" />
+                                    )
+                                    : snapshot?.generationDiff
+                                        ? (
+                                            <pre className="generation-diff">{snapshot.generationDiff}</pre>
+                                        )
+                                        : (
+                                            <p className="muted">
+                                                The systems differ, but <code>nvd</code> is unavailable or did not return a diff.
+                                            </p>
+                                        )}
                             </CardBody>
                         </Card>
                     </GridItem>
@@ -380,32 +392,38 @@ export const Application = () => {
                                 </p>
                                 <div className="module-browser">
                                     <div className="module-list" role="navigation" aria-label="Nix modules">
-                                        {moduleFiles.length ? moduleFiles.map(path => {
-                                            const relative = path.replace(`${CONFIG_ROOT}/`, "");
-                                            return (
-                                                <Button
-                                                    key={path}
-                                                    variant="link"
-                                                    isInline
-                                                    className={selectedModule === path ? "selected-module" : ""}
-                                                    onClick={() => void openModule(path)}
-                                                >
-                                                    {relative}
-                                                </Button>
-                                            );
-                                        }) : (
-                                            <span className="muted">No module files found.</span>
-                                        )}
+                                        {moduleFiles.length
+                                            ? moduleFiles.map(path => {
+                                                const relative = path.replace(`${CONFIG_ROOT}/`, "");
+                                                return (
+                                                    <Button
+                                                        key={path}
+                                                        variant="link"
+                                                        isInline
+                                                        className={selectedModule === path ? "selected-module" : ""}
+                                                        onClick={() => openModule(path)}
+                                                    >
+                                                        {relative}
+                                                    </Button>
+                                                );
+                                            })
+                                            : (
+                                                <span className="muted">No module files found.</span>
+                                            )}
                                     </div>
                                     <div className="module-source">
-                                        {selectedModule ? (
-                                            <>
-                                                <div className="source-path"><code>{selectedModule}</code></div>
-                                                {moduleLoading ? <Spinner size="md" /> : <pre>{moduleContent}</pre>}
-                                            </>
-                                        ) : (
-                                            <span className="muted">Select a module to inspect its source.</span>
-                                        )}
+                                        {selectedModule
+                                            ? (
+                                                <>
+                                                    <div className="source-path"><code>{selectedModule}</code></div>
+                                                    {moduleLoading
+                                                        ? <Spinner size="md" />
+                                                        : <pre>{moduleContent}</pre>}
+                                                </>
+                                            )
+                                            : (
+                                                <span className="muted">Select a module to inspect its source.</span>
+                                            )}
                                     </div>
                                 </div>
                             </CardBody>
