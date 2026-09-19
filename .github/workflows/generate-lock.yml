@@ -30,7 +30,7 @@ jobs:
 
       - name: Commit lockfile
         run: |
-          if git diff --quiet -- package-lock.json && [ -f package-lock.json ]; then
+          if [ -z "$(git status --porcelain -- package-lock.json)" ] && [ -f package-lock.json ]; then
             echo "No lockfile changes to commit"
             exit 0
           fi
