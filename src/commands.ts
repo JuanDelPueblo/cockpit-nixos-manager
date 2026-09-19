@@ -8,23 +8,6 @@ export const CONFIG_ROOT = "/etc/nixos";
 
 export type RebuildAction = "build" | "test" | "switch";
 
-export interface SystemSnapshot {
-    hostname: string;
-    nixosVersion: string | null;
-    nhVersion: string | null;
-    branch: string | null;
-    head: string | null;
-    master: string | null;
-    deploy: string | null;
-    dirtyFiles: number;
-    runningSystem: string | null;
-    defaultSystem: string | null;
-    generations: string | null;
-    comin: CominStatus | null;
-    failedUnits: string[];
-    generationDiff: string | null;
-}
-
 export interface CominRemoteStatus {
     name: string;
     url: string;
@@ -79,6 +62,23 @@ export interface CominStatus {
     generation: CominGenerationStatus | null;
     deployment: CominDeploymentStatus | null;
     repositoryError: string | null;
+}
+
+export interface SystemSnapshot {
+    hostname: string;
+    nixosVersion: string | null;
+    nhVersion: string | null;
+    branch: string | null;
+    head: string | null;
+    master: string | null;
+    deploy: string | null;
+    dirtyFiles: number;
+    runningSystem: string | null;
+    defaultSystem: string | null;
+    generations: string | null;
+    comin: CominStatus | null;
+    failedUnits: string[];
+    generationDiff: string | null;
 }
 
 async function optionalSpawn(args: string[], directory?: string): Promise<string | null> {
