@@ -37,7 +37,7 @@ const shortStorePath = (path: string | null): string => {
         return "Unavailable";
 
     const parts = path.split("/");
-    return parts.at(-1) || path;
+    return parts[parts.length - 1] || path;
 };
 
 const sha = (value: string | null): string => value || "Unavailable";
