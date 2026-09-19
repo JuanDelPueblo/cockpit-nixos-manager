@@ -29,7 +29,6 @@
 }
 
 .health-row,
-.console-heading,
 .card-title-row {
     display: flex;
     gap: 1rem;
@@ -41,18 +40,67 @@
     margin-block: 1.25rem 0.5rem;
 }
 
-.comin-details {
-    margin-block-start: 1rem;
+.status-badge-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
 }
 
-.comin-status-labels {
+.lifecycle-pipeline {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 0.5rem;
+    align-items: stretch;
+    margin-block: 1rem;
 }
 
-.comin-detail {
-    margin-inline-start: 0.5rem;
+.lifecycle-stage {
+    flex: 1 1 9.5rem;
+    min-width: 8.5rem;
+    padding: 0.75rem;
+    border: 1px solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--small);
+    background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.stage-header {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-block-end: 0.5rem;
+}
+
+.stage-step {
+    display: inline-flex;
+    width: 1.25rem;
+    height: 1.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--pf-t--global--color--brand--default);
+    color: #fff;
+    font-size: var(--pf-t--global--font--size--xs);
+    font-weight: 700;
+}
+
+.stage-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.stage-meta {
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: var(--pf-t--global--font--size--xs);
+}
+
+.lifecycle-separator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: 1.25rem;
 }
 
 .commit-message {
@@ -73,21 +121,18 @@
     margin-block: 1rem;
 }
 
-.action-console {
-    margin-block-start: 1rem;
+.lifecycle-actions {
+    margin-block-start: 1.25rem;
 }
 
-.rebuild-terminal {
-    overflow: auto;
-    margin-block-start: 0.75rem;
-    padding: 0.5rem;
-    border: 1px solid var(--pf-t--global--border--color--default);
-    border-radius: var(--pf-t--global--border--radius--small);
-    background: #000;
+.deployment-table-wrapper {
+    overflow-x: auto;
 }
 
-.rebuild-terminal .xterm {
-    min-height: 21rem;
+.retention-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
 }
 
 .compact-output,
@@ -147,6 +192,10 @@
 @media (width <= 768px) {
     .manager-heading {
         flex-direction: column;
+    }
+
+    .lifecycle-separator {
+        display: none;
     }
 
     .module-browser {
