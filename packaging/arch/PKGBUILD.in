@@ -1,9 +1,9 @@
-pkgname=cockpit-starter-kit
+pkgname=cockpit-nixos-manager
 pkgver=VERSION
 pkgrel=1
-pkgdesc='Cockpit Starter Kit Example Module'
+pkgdesc='Declarative NixOS management for Cockpit'
 arch=('x86_64')
-url='https://github.com/cockpit-project/starter-kit'
+url='https://github.com/JuanDelPueblo/cockpit-nixos-manager'
 license=(LGPL)
 source=("SOURCE")
 sha256sums=('SKIP')

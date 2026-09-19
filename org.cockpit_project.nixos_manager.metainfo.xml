@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>org.cockpit_project.nixos_manager</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>NixOS Manager</name>
+  <summary>Declarative NixOS management for Cockpit</summary>
+  <description>
+    <p>
+      Cockpit NixOS Manager shows the relationship between a Git-backed NixOS
+      configuration, system generations, Comin deployments, and the running
+      system. It also provides fixed build, test, and switch actions.
+    </p>
+  </description>
+  <extends>org.cockpit_project.cockpit</extends>
+  <launchable type="cockpit-manifest">nixos-manager</launchable>
+  <url type="homepage">https://github.com/JuanDelPueblo/cockpit-nixos-manager</url>
+  <url type="bugtracker">https://github.com/JuanDelPueblo/cockpit-nixos-manager/issues</url>
+  <developer id="com.github.JuanDelPueblo">
+    <name>JuanDelPueblo</name>
+  </developer>
+</component>
