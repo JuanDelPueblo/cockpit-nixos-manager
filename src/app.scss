@@ -29,7 +29,8 @@
 }
 
 .health-row,
-.console-heading {
+.console-heading,
+.card-title-row {
     display: flex;
     gap: 1rem;
     align-items: center;
@@ -38,6 +39,31 @@
 
 .section-heading {
     margin-block: 1.25rem 0.5rem;
+}
+
+.comin-details {
+    margin-block-start: 1rem;
+}
+
+.comin-status-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.comin-detail {
+    margin-inline-start: 0.5rem;
+}
+
+.commit-message {
+    margin-block-start: 0.25rem;
+    white-space: pre-line;
+}
+
+.comin-error {
+    margin-block-start: 0.25rem;
+    color: var(--pf-t--global--color--status--danger--default);
+    white-space: pre-wrap;
 }
 
 .action-buttons {
