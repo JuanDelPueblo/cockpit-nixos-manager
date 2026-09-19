@@ -148,7 +148,13 @@ export async function runRebuild(
     const process = cockpit.spawn(args, {
         directory: CONFIG_ROOT,
         err: "out",
-        environ: [\n            "NO_COLOR=1",\n            "TERM=dumb",\n            "GIT_CONFIG_COUNT=1",\n            "GIT_CONFIG_KEY_0=safe.directory",\n            `GIT_CONFIG_VALUE_0=${CONFIG_ROOT}`,\n        ],
+        environ: [
+            "NO_COLOR=1",
+            "TERM=dumb",
+            "GIT_CONFIG_COUNT=1",
+            "GIT_CONFIG_KEY_0=safe.directory",
+            `GIT_CONFIG_VALUE_0=${CONFIG_ROOT}`,
+        ],
         ...(action === "build" ? {} : { superuser: "require" as const }),
     });
 
