@@ -1,5 +1,5 @@
 {
-  description = "Cockpit plugin for declarative NixOS management";
+  description = "Cockpit plugin for the comin GitOps agent on NixOS";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -57,7 +57,7 @@
           '';
 
           meta = {
-            description = "Cockpit interface for understanding and operating declarative NixOS systems";
+            description = "Cockpit interface for the comin GitOps agent on NixOS";
             homepage = "https://github.com/JuanDelPueblo/cockpit-nixos-manager";
             license = pkgs.lib.licenses.lgpl21Plus;
             platforms = supportedSystems;

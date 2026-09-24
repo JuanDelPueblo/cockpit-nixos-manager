@@ -4,8 +4,6 @@
 
 import cockpit from "cockpit";
 
-export const CONFIG_ROOT = "/etc/nixos";
-
 export interface CominRemoteStatus {
     name: string;
     url: string;
@@ -95,36 +93,16 @@ export interface CominStatus {
     pastDeployments: CominStoreDeployment[];
 }
 
-export interface SystemSnapshot {
-    hostname: string;
-    nixosVersion: string | null;
-    branch: string | null;
-    head: string | null;
-    headSubject: string | null;
-    master: string | null;
-    deploy: string | null;
-    dirtyFiles: number;
-    runningSystem: string | null;
-    defaultSystem: string | null;
-    generations: string | null;
+export interface CominSnapshot {
     comin: CominStatus | null;
-    generationDiff: string | null;
+    error: string | null;
 }
 
-async function optionalSpawn(args: string[], directory?: string): Promise<string | null> {
-    try {
-        const output = await cockpit.spawn(args, {
-            err: "message",
-            ...(directory ? { directory } : {}),
-        });
-        return output.trim();
-    } catch {
-        return null;
-    }
-}
+function errorMessage(error: unknown): string {
+    if (typeof error === "object" && error !== null && typeof (error as { message?: unknown }).message === "string")
+        return (error as { message: string }).message;
 
-async function git(...args: string[]): Promise<string | null> {
-    return optionalSpawn(["git", "-C", CONFIG_ROOT, ...args]);
+    return String(error);
 }
 
 type JsonObject = Record<string, unknown>;
@@ -298,11 +276,6 @@ function parseCominStatus(output: string): CominStatus | null {
     }
 }
 
-async function loadCominStatus(): Promise<CominStatus | null> {
-    const output = await optionalSpawn(["comin", "status", "--json"]);
-    return output ? parseCominStatus(output) : null;
-}
-
 async function requiredSpawn(args: string[], superuser = false): Promise<void> {
     try {
         await cockpit.spawn(args, {
@@ -310,7 +283,7 @@ async function requiredSpawn(args: string[], superuser = false): Promise<void> {
             ...(superuser ? { superuser: "require" as const } : {}),
         });
     } catch (error) {
-        throw new Error(error instanceof Error ? error.message : String(error));
+        throw new Error(errorMessage(error));
     }
 }
 
@@ -334,54 +307,16 @@ export async function acceptConfirmation(): Promise<void> {
     await requiredSpawn(["comin", "confirmation", "accept"]);
 }
 
-export async function loadSnapshot(): Promise<SystemSnapshot> {
-    const [
-        hostname,
-        nixosVersion,
-        branch,
-        head,
-        headSubject,
-        remoteMaster,
-        localMaster,
-        deploy,
-        dirty,
-        runningSystem,
-        defaultSystem,
-        generations,
-        comin,
-    ] = await Promise.all([
-        optionalSpawn(["hostname"]),
-        optionalSpawn(["nixos-version"]),
-        git("branch", "--show-current"),
-        git("rev-parse", "--short=12", "HEAD"),
-        git("log", "-1", "--format=%s", "HEAD"),
-        git("rev-parse", "--short=12", "refs/remotes/origin/master"),
-        git("rev-parse", "--short=12", "refs/heads/master"),
-        git("rev-parse", "--short=12", "refs/remotes/origin/deploy"),
-        git("status", "--porcelain=v1"),
-        optionalSpawn(["readlink", "-f", "/run/current-system"]),
-        optionalSpawn(["readlink", "-f", "/nix/var/nix/profiles/system"]),
-        optionalSpawn(["nix-env", "--list-generations", "-p", "/nix/var/nix/profiles/system"]),
-        loadCominStatus(),
-    ]);
+export async function loadSnapshot(): Promise<CominSnapshot> {
+    let output: string;
+    try {
+        output = await cockpit.spawn(["comin", "status", "--json"], { err: "message" });
+    } catch (error) {
+        return { comin: null, error: errorMessage(error) };
+    }
 
-    let generationDiff: string | null = null;
-    if (runningSystem && defaultSystem && runningSystem !== defaultSystem)
-        generationDiff = await optionalSpawn(["nvd", "diff", runningSystem, defaultSystem]);
-
-    return {
-        hostname: hostname || "unknown",
-        nixosVersion,
-        branch,
-        head,
-        headSubject,
-        master: remoteMaster || localMaster,
-        deploy,
-        dirtyFiles: dirty ? dirty.split("\n").filter(Boolean).length : 0,
-        runningSystem,
-        defaultSystem,
-        generations,
-        comin,
-        generationDiff,
-    };
+    const comin = parseCominStatus(output);
+    return comin
+        ? { comin, error: null }
+        : { comin: null, error: "Unable to parse the output of comin status --json." };
 }

@@ -1,23 +1,18 @@
 # Cockpit NixOS Manager
 
-A small Cockpit interface to inspect and operate declarative NixOS GitOps systems.
+A small Cockpit interface for the [comin](https://github.com/nlewo/comin) GitOps agent on NixOS.
 
-The project operates on Git-backed flakes and a dendritic repository. It reads the real checkout and system state without a second configuration database.
+Everything the interface shows and does goes through comin. It makes no assumptions about a local configuration checkout (such as `/etc/nixos`), branch names, or manual `nixos-rebuild` workflows: whatever repository, remotes, and branches comin is configured with are what you see.
 
 ## Features
 
-The interface connects to a local NixOS checkout at `/etc/nixos` and provides:
+- Comin GitOps lifecycle visualization: Git source → fetch → evaluation → build → deployment → switched system;
+- Configured remotes with their URL, main branch, last fetch time, and fetch errors;
+- Pending build/deployment confirmations and reboot-required state;
+- Comin deployment history with switched, booted, boot-entry, and successful roles;
+- Native comin actions: immediate fetch, suspend, resume, confirmation accept, deployment resubmit, and live switch.
 
-- Host, NixOS version, Git `master`/`deploy` refs, and dirty checkout status;
-- Comin GitOps lifecycle visualization: Git source → fetch → evaluation → build → deployment → running system;
-- Native Comin actions: immediate fetch, suspend, resume, confirmation accept, and live switch;
-- Running system store path vs boot-default system store path;
-- Failed systemd units list;
-- NixOS generation history;
-- An `nvd` diff when the running and default systems differ;
-- A read-only browser for `/etc/nixos/modules/**/*.nix`.
-
-The manager does not edit Nix files, change SOPS secrets, or expose a root shell.
+The manager does not edit Nix files, change secrets, or expose a root shell.
 
 ## Nix packaging
 
@@ -60,19 +55,11 @@ For continuous build:
 make watch
 ```
 
-The target host requires `git`, Nix tooling, `comin`, and optionally `nvd`. Missing optional tools appear as unavailable.
-
-## Current assumptions
-
-- Configuration checkout: `/etc/nixos`
-- NixOS flake output name: local hostname
-- Dendritic modules: `/etc/nixos/modules`
-- Git deployment branches: `master` and `deploy`
-- System profile: `/nix/var/nix/profiles/system`
+The target host only requires `comin` to be installed and running with its local socket reachable. When comin is unavailable, the interface shows the error reported by `comin status`.
 
 ## Safety boundary
 
-Inspection executes fixed commands directly through Cockpit. Comin actions execute fixed argument arrays:
+The interface executes only fixed comin argument arrays:
 
 ```text
 comin status --json
