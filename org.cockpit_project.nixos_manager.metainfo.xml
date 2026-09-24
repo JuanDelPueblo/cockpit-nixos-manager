@@ -3,12 +3,13 @@
   <id>org.cockpit_project.nixos_manager</id>
   <metadata_license>CC0-1.0</metadata_license>
   <name>NixOS Manager</name>
-  <summary>Declarative NixOS management for Cockpit</summary>
+  <summary>Comin GitOps management for Cockpit</summary>
   <description>
     <p>
-      Cockpit NixOS Manager shows the relationship between a Git-backed NixOS
-      configuration, system generations, Comin deployments, and the running
-      system. It also provides fixed build, test, and switch actions.
+      Cockpit NixOS Manager shows the state of the comin GitOps agent on a
+      NixOS host: its remotes, evaluation, build, and deployment lifecycle, and
+      deployment history. It also exposes comin's fetch, suspend, resume,
+      confirmation, and switch actions.
     </p>
   </description>
   <extends>org.cockpit_project.cockpit</extends>

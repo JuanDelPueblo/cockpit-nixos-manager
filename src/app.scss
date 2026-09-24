@@ -44,8 +44,12 @@
     color: var(--pf-t--global--text--color--subtle);
 }
 
-.state-label {
+.remote-selected-label {
     margin-inline-start: 0.5rem;
+}
+
+.remote-url {
+    overflow-wrap: anywhere;
 }
 
 .muted {
@@ -144,22 +148,6 @@
     flex-wrap: wrap;
     gap: 0.35rem;
     align-items: center;
-}
-
-.generation-list,
-.generation-diff {
-    overflow: auto;
-    max-height: 24rem;
-    margin-block: 0.75rem 0;
-    padding: 0.75rem;
-    border: 1px solid var(--pf-t--global--border--color--default);
-    border-radius: var(--pf-t--global--border--radius--small);
-    background: var(--pf-t--global--background--color--secondary--default);
-    font-family: var(--pf-t--global--font--family--mono);
-    font-size: var(--pf-t--global--font--size--sm);
-    line-height: 1.4;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
 }
 
 @media (width <= 768px) {

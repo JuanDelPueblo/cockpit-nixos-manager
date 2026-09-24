@@ -1,7 +1,7 @@
 Name: cockpit-nixos-manager
 Version: %{VERSION}
 Release: 1%{?dist}
-Summary: Declarative NixOS management for Cockpit
+Summary: Comin GitOps management for Cockpit
 License: LGPL-2.1-or-later
 
 %if 0%{?fedora} >= 42
@@ -35,7 +35,7 @@ Requires: cockpit-bridge
 %{NPM_PROVIDES}
 
 %description
-Cockpit interface for inspecting and manually applying a Git-backed NixOS configuration.
+Cockpit interface for the comin GitOps agent on NixOS.
 
 %prep
 %autosetup -n %{name}

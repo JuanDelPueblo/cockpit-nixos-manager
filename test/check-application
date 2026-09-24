@@ -10,9 +10,7 @@ class TestApplication(testlib.MachineCase):
 
         self.login_and_go("/nixos-manager")
         b.wait_text("h1", "NixOS Manager")
-        b.wait_in_text("body", "Declarative state")
-        b.wait_in_text("body", "Manual rebuild")
-        b.wait_in_text("body", "Dendritic module tree")
+        b.wait_in_text("body", "GitOps lifecycle")
 
 
 if __name__ == '__main__':

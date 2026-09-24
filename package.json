@@ -1,6 +1,6 @@
 {
   "name": "nixos-manager",
-  "description": "Cockpit interface for understanding and operating declarative NixOS systems",
+  "description": "Cockpit interface for the comin GitOps agent on NixOS",
   "type": "module",
   "main": "index.js",
   "repository": "https://github.com/JuanDelPueblo/cockpit-nixos-manager.git",

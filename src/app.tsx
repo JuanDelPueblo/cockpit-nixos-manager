@@ -24,12 +24,11 @@ import {
 
 import {
     acceptConfirmation,
-    CONFIG_ROOT,
+    CominSnapshot,
     fetchComin,
     loadSnapshot,
     setCominSuspended,
     submitLatestDeployment,
-    SystemSnapshot,
 } from "./commands.js";
 
 const shortStorePath = (path: string | null): string => {
@@ -39,8 +38,6 @@ const shortStorePath = (path: string | null): string => {
     const parts = path.split("/");
     return parts[parts.length - 1] || path;
 };
-
-const sha = (value: string | null): string => value || "Unavailable";
 
 const shortSha = (value: string | null): string => value ? value.slice(0, 12) : "Unavailable";
 
@@ -75,7 +72,7 @@ const statusColor = (status: string | null): "green" | "red" | "blue" | "orange"
 };
 
 export const Application = () => {
-    const [snapshot, setSnapshot] = useState<SystemSnapshot | null>(null);
+    const [snapshot, setSnapshot] = useState<CominSnapshot | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -140,12 +137,6 @@ export const Application = () => {
         );
     }
 
-    const defaultMatchesRunning = Boolean(
-        snapshot?.runningSystem &&
-        snapshot?.defaultSystem &&
-        snapshot.runningSystem === snapshot.defaultSystem
-    );
-
     const comin = snapshot?.comin;
     const latestDeployment = comin?.deployment;
     const latestGeneration = comin?.generation;
@@ -168,9 +159,19 @@ export const Application = () => {
         latestDeployment.operation !== "switch"
     );
 
-    const gitCommit = comin?.selectedCommit ?? null;
-    const gitMessage = comin?.selectedCommitMessage || (snapshot?.head === gitCommit ? snapshot?.headSubject : null);
-    const gitTitle = commitTitle(gitMessage);
+    const gitTitle = commitTitle(comin?.selectedCommitMessage);
+
+    const switchedDeployment = comin?.pastDeployments.find(d => d.isSwitched) ?? null;
+    const bootedDeployment = comin?.pastDeployments.find(d => d.isBooted) ?? null;
+    const switchedMatchesBooted = Boolean(
+        switchedDeployment && bootedDeployment && switchedDeployment.uuid === bootedDeployment.uuid
+    );
+
+    const lastFetchedAt = comin?.remotes
+            .map(remote => remote.fetchedAt)
+            .filter((value): value is string => Boolean(value))
+            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+    const fetchErrors = comin?.remotes.filter(remote => remote.fetchError) ?? [];
 
     return (
         <Page className="pf-m-no-sidebar manager-page">
@@ -179,7 +180,8 @@ export const Application = () => {
                     <div>
                         <Title headingLevel="h1">NixOS Manager</Title>
                         <p className="manager-subtitle">
-                            Inspect and operate the declarative GitOps lifecycle in <code>{CONFIG_ROOT}</code>.
+                            Inspect and operate the comin GitOps agent
+                            {comin?.hostname ? <> for <code>{comin.hostname}</code></> : null}.
                         </p>
                     </div>
                     <div className="manager-header-actions">
@@ -343,7 +345,7 @@ export const Application = () => {
                                                     <DescriptionListTerm>Git source</DescriptionListTerm>
                                                     <DescriptionListDescription>
                                                         <div>
-                                                            Branch: <code>{comin.selectedBranch || "deploy"}</code>
+                                                            Branch: <code>{comin.selectedBranch || "Unavailable"}</code>
                                                         </div>
                                                         <div>
                                                             Commit: <code>{shortSha(comin.selectedCommit)}</code>
@@ -354,7 +356,7 @@ export const Application = () => {
                                                             </div>
                                                         )}
                                                         <div className="stage-meta">
-                                                            Remote: <code>{comin.selectedRemote || "github"}</code>
+                                                            Remote: <code>{comin.selectedRemote || "Unavailable"}</code>
                                                         </div>
                                                     </DescriptionListDescription>
                                                 </DescriptionListGroup>
@@ -366,11 +368,13 @@ export const Application = () => {
                                                             {comin.fetching ? "Fetch in progress" : "Fetched"}
                                                         </Label>
                                                         <div className="stage-meta">
-                                                            {formatTimestamp(comin.remotes[0]?.fetchedAt ?? null)}
+                                                            {formatTimestamp(lastFetchedAt)}
                                                         </div>
-                                                        {comin.remotes[0]?.fetchError && (
-                                                            <div className="comin-error">{comin.remotes[0].fetchError}</div>
-                                                        )}
+                                                        {fetchErrors.map(remote => (
+                                                            <div key={remote.name} className="comin-error">
+                                                                {remote.name}: {remote.fetchError}
+                                                            </div>
+                                                        ))}
                                                     </DescriptionListDescription>
                                                 </DescriptionListGroup>
 
@@ -426,129 +430,96 @@ export const Application = () => {
                                                 </DescriptionListGroup>
 
                                                 <DescriptionListGroup>
-                                                    <DescriptionListTerm>Running system</DescriptionListTerm>
+                                                    <DescriptionListTerm>Switched system</DescriptionListTerm>
                                                     <DescriptionListDescription>
                                                         <div>
-                                                            <code>{shortStorePath(snapshot?.runningSystem ?? null)}</code>
+                                                            <span title={switchedDeployment?.outPath || undefined}>
+                                                                <code>{shortStorePath(switchedDeployment?.outPath ?? null)}</code>
+                                                            </span>
                                                         </div>
-                                                        <div className="stage-meta">
-                                                            <Label color={defaultMatchesRunning ? "green" : "orange"}>
-                                                                {defaultMatchesRunning ? "Matches boot default" : "Differs from boot default"}
-                                                            </Label>
-                                                        </div>
+                                                        {bootedDeployment && (
+                                                            <div className="stage-meta">
+                                                                <Label color={switchedMatchesBooted ? "green" : "orange"}>
+                                                                    {switchedMatchesBooted ? "Matches booted deployment" : "Differs from booted deployment"}
+                                                                </Label>
+                                                            </div>
+                                                        )}
                                                     </DescriptionListDescription>
                                                 </DescriptionListGroup>
                                             </DescriptionList>
                                         </>
                                     )
                                     : (
-                                        <p className="muted">
-                                            Comin is not running or its local socket could not be reached.
-                                        </p>
+                                        <>
+                                            <p className="muted">
+                                                Comin is not running or its local socket could not be reached.
+                                            </p>
+                                            {snapshot?.error && (
+                                                <div className="comin-error">{snapshot.error}</div>
+                                            )}
+                                        </>
                                     )}
                             </CardBody>
                         </Card>
                     </GridItem>
 
-                    {/* Declarative State & Generations */}
-                    <GridItem sm={12} lg={6}>
-                        <Card isFullHeight>
-                            <CardTitle>Declarative state</CardTitle>
-                            <CardBody>
-                                <DescriptionList isHorizontal>
-                                    <DescriptionListGroup>
-                                        <DescriptionListTerm>Host</DescriptionListTerm>
-                                        <DescriptionListDescription>{snapshot?.hostname || "Unknown"}</DescriptionListDescription>
-                                    </DescriptionListGroup>
-                                    <DescriptionListGroup>
-                                        <DescriptionListTerm>NixOS version</DescriptionListTerm>
-                                        <DescriptionListDescription>{snapshot?.nixosVersion || "Unavailable"}</DescriptionListDescription>
-                                    </DescriptionListGroup>
-                                    <DescriptionListGroup>
-                                        <DescriptionListTerm>Checkout</DescriptionListTerm>
-                                        <DescriptionListDescription>
-                                            <div>
-                                                <code>{snapshot?.branch || "detached"}</code> @ <code>{sha(snapshot?.head ?? null)}</code>
-                                                {snapshot?.dirtyFiles
-                                                    ? (
-                                                        <Label color="orange" className="state-label">
-                                                            {snapshot.dirtyFiles} uncommitted file{snapshot.dirtyFiles === 1 ? "" : "s"}
-                                                        </Label>
-                                                    )
-                                                    : (
-                                                        <Label color="green" className="state-label">clean</Label>
-                                                    )}
-                                            </div>
-                                            {snapshot?.headSubject && (
-                                                <div className="commit-title-text">
-                                                    {snapshot.headSubject}
-                                                </div>
-                                            )}
-                                        </DescriptionListDescription>
-                                    </DescriptionListGroup>
-                                    <DescriptionListGroup>
-                                        <DescriptionListTerm>Branch master</DescriptionListTerm>
-                                        <DescriptionListDescription><code>{sha(snapshot?.master ?? null)}</code></DescriptionListDescription>
-                                    </DescriptionListGroup>
-                                    <DescriptionListGroup>
-                                        <DescriptionListTerm>Branch deploy (CI)</DescriptionListTerm>
-                                        <DescriptionListDescription>
-                                            <code>{sha(snapshot?.deploy ?? null)}</code>
-                                            <span className="muted"> cached local remote ref</span>
-                                        </DescriptionListDescription>
-                                    </DescriptionListGroup>
-                                    <DescriptionListGroup>
-                                        <DescriptionListTerm>Running system</DescriptionListTerm>
-                                        <DescriptionListDescription><code>{shortStorePath(snapshot?.runningSystem ?? null)}</code></DescriptionListDescription>
-                                    </DescriptionListGroup>
-                                    <DescriptionListGroup>
-                                        <DescriptionListTerm>Boot default</DescriptionListTerm>
-                                        <DescriptionListDescription>
-                                            <code>{shortStorePath(snapshot?.defaultSystem ?? null)}</code>
-                                            {snapshot?.runningSystem && snapshot?.defaultSystem && (
-                                                <Label
-                                                    color={defaultMatchesRunning ? "green" : "orange"}
-                                                    className="state-label"
-                                                >
-                                                    {defaultMatchesRunning ? "running" : "different from running"}
-                                                </Label>
-                                            )}
-                                        </DescriptionListDescription>
-                                    </DescriptionListGroup>
-                                    {!defaultMatchesRunning && snapshot?.generationDiff && (
-                                        <DescriptionListGroup>
-                                            <DescriptionListTerm>Running → boot diff</DescriptionListTerm>
-                                            <DescriptionListDescription>
-                                                <pre className="generation-diff">{snapshot.generationDiff}</pre>
-                                            </DescriptionListDescription>
-                                        </DescriptionListGroup>
-                                    )}
-                                </DescriptionList>
-                            </CardBody>
-                        </Card>
-                    </GridItem>
-
-                    {/* System Generations History */}
-                    <GridItem sm={12} lg={6}>
-                        <Card isFullHeight>
-                            <CardTitle>System generations</CardTitle>
-                            <CardBody>
-                                {snapshot?.generations
-                                    ? (
-                                        <pre className="generation-list">{snapshot.generations}</pre>
-                                    )
-                                    : (
-                                        <p className="muted">Generation history is unavailable.</p>
-                                    )}
-                            </CardBody>
-                        </Card>
-                    </GridItem>
+                    {/* Comin Remotes */}
+                    {comin && comin.remotes.length > 0 && (
+                        <GridItem sm={12}>
+                            <Card>
+                                <CardTitle>Remotes</CardTitle>
+                                <CardBody>
+                                    <div className="deployment-table-wrapper">
+                                        <table className="pf-v6-c-table pf-m-compact deployment-table" aria-label="Comin remotes">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>URL</th>
+                                                    <th>Main branch</th>
+                                                    <th>Last fetch</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {comin.remotes.map(remote => (
+                                                    <tr key={remote.name}>
+                                                        <td>
+                                                            <code>{remote.name}</code>
+                                                            {remote.name === comin.selectedRemote && (
+                                                                <Label color="blue" className="remote-selected-label">selected</Label>
+                                                            )}
+                                                        </td>
+                                                        <td className="remote-url"><code>{remote.url || "Unavailable"}</code></td>
+                                                        <td>
+                                                            <code>{remote.mainBranch || "Unavailable"}</code>
+                                                            {remote.mainCommit && (
+                                                                <div className="stage-meta">
+                                                                    <code>{shortSha(remote.mainCommit)}</code>
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            <div className="table-cell-nowrap">
+                                                                {remote.fetched ? formatTimestamp(remote.fetchedAt) : "Not fetched"}
+                                                            </div>
+                                                            {remote.fetchError && (
+                                                                <div className="comin-error">{remote.fetchError}</div>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </CardBody>
+                            </Card>
+                        </GridItem>
+                    )}
 
                     {/* Comin Deployment Retention Table */}
                     {comin && comin.pastDeployments.length > 0 && (
                         <GridItem sm={12}>
                             <Card>
-                                <CardTitle>Comin deployment retention</CardTitle>
+                                <CardTitle>Comin deployments</CardTitle>
                                 <CardBody>
                                     <div className="deployment-table-wrapper">
                                         <table className="pf-v6-c-table pf-m-compact deployment-table" aria-label="Comin deployments">

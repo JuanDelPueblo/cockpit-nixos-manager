@@ -1,7 +1,7 @@
 pkgname=cockpit-nixos-manager
 pkgver=VERSION
 pkgrel=1
-pkgdesc='Declarative NixOS management for Cockpit'
+pkgdesc='Comin GitOps management for Cockpit'
 arch=('x86_64')
 url='https://github.com/JuanDelPueblo/cockpit-nixos-manager'
 license=(LGPL)
