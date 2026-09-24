@@ -11,6 +11,8 @@ class TestApplication(testlib.MachineCase):
         self.login_and_go("/nixos-manager")
         b.wait_text("h1", "NixOS Manager")
         b.wait_in_text("body", "GitOps lifecycle")
+        b.wait_in_text(".pf-v6-c-tabs", "Deployments")
+        b.wait_in_text(".pf-v6-c-tabs", "Logs")
 
 
 if __name__ == '__main__':
