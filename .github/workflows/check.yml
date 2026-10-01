@@ -13,13 +13,13 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
-      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/nix-installer-action@v23
 
       - name: Build
         run: make
